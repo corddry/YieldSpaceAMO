@@ -85,26 +85,49 @@ contract YieldSpaceAMO is Owned {
     /* ========= RESTRICTED FUNCTIONS ======== */
     /// @notice mint fyFrax using FRAX as collateral
     function mintFyFrax(uint256 frax_amount) public view onlyByOwnGovCust returns (uint256) {
+        //Transfer FRAX to the FRAX Join, add it as collateral, and borrow.
+        //frax.transfer(fraxJoin, fraxAmount);
+        //ladle.pour(vaultId, fyFraxReceiver, fraxAmount, fyFraxAmount);
     }
 
     /// @notice burn fyFrax to redeem FRAX collateral
     function burnFyFrax(uint256 frax_amount) public view onlyByOwnGovCust returns (uint256) {
+        //Transfer fyFRAX to the fyFRAX contract, repay debt, and withdraw FRAX collateral.
+        //fyFrax.transfer(fyFraxContract, fyFraxAmount);
+        //ladle.pour(vaultId, fraxRceiver, -fraxAmount, -fyFraxAmount);
     }
 
     /// @notice mint new fyFrax to sell into the AMM to push up rates
     function increaseRates(uint256 frax_amount) public view onlyByOwnGovCust returns (uint256) {
+        //Mint fyFRAX into the pool, and sell it.
+        //frax.transfer(fraxJoin, fraxAmount);
+        //ladle.pour(vaultId, fraxPool, fraxAmount, fyFraxAmount);
+        //pool.sellFyToken(fraxReceiver, minimumFraxReceived);
     }
 
     /// @notice buy fyFrax from the AMO to push down rates //TODO and burn???
     function decreaseRates(uint256 frax_amount) public view onlyByOwnGovCust returns (uint256) {
+        //Transfer FRAX into the pool, sell it for fyFRAX into the fyFRAX contract, repay debt and withdraw FRAX collateral.
+        //frax.transfer(pool, fraxAmount);
+        //pool.sellBase(fyFraxContract, minimumFyFraxReceived);
+        //ladle.pour(vaultId, fraxReceiver, -fraxAmount, -fyFraxAmount);
     }
 
     /// @notice mint fyFrax tokens, pair with FRAX and provide liquidity
     function addLiquidityToAMM(uint256 frax_amount) public view onlyByOwnGovCust returns (uint256) {
+        //Transfer FRAX into the pool. Transfer FRAX into the FRAX Join. Borrow fyFRAX into the pool. Add liquidity.
+        //frax.transfer(fraxJoin, fyFraxAmount);
+        //frax.transfer(pool, fraxAmount);
+        //ladle.pour(vaultId, fraxPool, fyFraxAmount, fyFraxAmount);
+        //pool.mint(lpReceiver, fraxRemainderReceiver, minRatio, maxRatio);
     }
 
     /// @notice remove liquidity and burn fyTokens //TODO why burn???
-    function addLiquidityToAMM(uint256 frax_amount) public view onlyByOwnGovCust returns (uint256) {
+    function removeLiquidityFromAMM(uint256 frax_amount) public view onlyByOwnGovCust returns (uint256) {
+        //Transfer pool tokens into the pool. Burn pool tokens, with the fyFRAX going into the Ladle. Instruct the Ladle to repay as much debt as fyFRAX it received, and withdraw the same amount of collateral.
+        //pool.transfer(pool, poolAmount);
+        //pool.burn(fraxReceiver, ladle, minRatio, maxRatio);
+        //ladle.repayFromLadle(vaultId, fraxReceiver);
     }
 
     /* === RESTRICTED GOVERNANCE FUNCTIONS === */
