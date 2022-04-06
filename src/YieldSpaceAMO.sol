@@ -18,13 +18,13 @@ pragma solidity ^0.8.0;
 // Sam Kazemian: https://github.com/samkazemian
 // Dennis: https://github.com/denett
 
-import "../Frax/Frax.sol"; //TODO adjust for foundry
-import "https://github.com/FraxFinance/frax-contracts-dev/blob/master/src/hardhat/contracts/Staking/Owned.sol";
-import "amoMinter";
+import "./Frax/IFrax.sol";
+import "./Frax/IFraxAmoMinter.sol";
+import "./utils/Owned.sol";
 
 contract YieldSpaceAMO is Owned {
     /* =========== STATE VARIABLES =========== */
-    FRAXStablecoin private immutable FRAX;
+    IFrax private immutable FRAX;
     IFraxAMOMinter private immutable amo_minter;
 
     address public immutable timelock_address;
@@ -40,7 +40,7 @@ contract YieldSpaceAMO is Owned {
         address _owner_address,
         address _amo_minter_address
     ) Owned(_owner_address) {
-        FRAX = FRAXStablecoin(0x853d955aCEf822Db058eb8505911ED77F175b99e);
+        FRAX = IFrax(0x853d955aCEf822Db058eb8505911ED77F175b99e);
         amo_minter = IFraxAMOMinter(_amo_minter_address);
 
         // TODO What is custodian? Get the custodian and timelock addresses from the minter
