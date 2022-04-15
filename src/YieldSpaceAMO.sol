@@ -89,25 +89,43 @@ contract YieldSpaceAMO is Owned {
     function getRate() public view returns (uint256) { //TODO Name better
     }
 
-    /// @notice returns the Frax fundraised by the AMM
-    /// @note signed return value
-    function currentRaisedFrax() public view returns (int256) {
-        return /*AmountOfFraxInLPPosition*/ - fraxLiquidityAdded; //TODO
+    function currFraxInAMOLP() public view returns (uint256) {
+        return FRAX.balanceOf(address(pool)) * pool.balanceOf(address(this)) / pool.totalSupply();
+    }
+    
+    function currFyFraxInAMOLP() public view returns (uint256) {
+        return fyFRAX.balanceOf(address(pool)) * pool.balanceOf(address(this)) / pool.totalSupply();
+    }
+
+    /// @return The Frax fundraised by the AMO
+    /// @return True if currFrax should be flipped in sign, ie the LP has less Frax than it began with
+    function currentRaisedFrax() public view returns (uint256 currentRaisedFrax, bool isNegative) {
+        fraxInLP = currFraxInAMOLP();
+        if (fraxInLP >= fraxLiquidityAdded) { //Frax has entered the AMO's LP
+            return (fraxInLP - fraxLiquidityAdded, false);
+        } else { //Frax has left the AMO's LP
+            return (fraxLiquidityAdded - fraxInLP, true);
+        }
+    }
+
+    /// @notice returns the current amount of FRAX that the protocol must pay out on maturity of circulating fyFRAX in the open market
+    /// @notice signed return value
+    function circulatingAMOMintedFyFrax() public view returns (uint256 circulatingFyFrax, bool isNegative) {
+        fyFraxInLP = currFyFraxInAMOLP();
+        if (fyFraxLiquidityAdded >= fyFraxInLP) { //AMO minted fyFrax has left the LP
+            return (fyFraxLiquidityAdded - fyFraxInLP, false);
+        } else { //non-AMO minted fyFrax has entered the LP
+            return (fyFraxInLP - fyFraxLiquidityAdded, true);
+        }
     }
 
     /// @notice returns the collateral balance of the AMO for calculating FRAX’s global collateral ratio
     /// (all AMOs have this function)
     function collatDollarBalance() public view returns (uint256) {
-        return currentAMOmintedFRAX * FRAX.global_collateral_ratio() + currentRaisedFrax() - circulatingAMOMintedFyFrax();
+        return currentAMOmintedFRAX * (FRAX.global_collateral_ratio() / 1000000) + currentRaisedFrax() - circulatingAMOMintedFyFrax(); 
     }
 
-    /// @notice returns the current amount of FRAX that the protocol must pay out on maturity of circulating fyFRAX in the open market
-    function circulatingAMOMintedFyFrax() public view returns (uint256) {
-        uint numLPtokens = pool.balanceOf(address(this));
-
-        // return numTokensMintedToAMO - %oftheLPthatWeControl*numberofFyTokensInPool;
-    }
-
+    
     /* ========= RESTRICTED FUNCTIONS ======== */
     /// @notice mint fyFrax using FRAX as collateral
     function mintFyFrax(uint256 frax_amount) public view onlyByOwnGovCust returns (uint256) {
