@@ -39,11 +39,12 @@ library DataTypes {
 interface ILadle {
     function pour(bytes12 vaultId_, address to, int128 ink, int128 art) external payable;
     function repayFromLadle(bytes12 vaultId_, address to) external payable returns (uint256 repaid);
-    function build(bytes6 seriesId, bytes6 ilkId, uint8 salt) external virtual payable returns(bytes12, DataTypes.Vault memory);
+    function build(bytes6 seriesId, bytes6 ilkId, uint8 salt) external returns (bytes12 vaultId, DataTypes.Vault memory vault);
+    function cauldron() external view returns (ICauldron);
 }
 
 interface ICauldron {
-    mapping (bytes12 => DataTypes.Balances) public balances;
+    function balances(bytes12 vault) external view returns (DataTypes.Balances memory);
 }
 
 contract YieldSpaceAMO is Owned {
@@ -84,7 +85,7 @@ contract YieldSpaceAMO is Owned {
 
         ladle = ILadle (_yield_ladle);
         pool = IPool(_target_fyFrax_pool);
-        fyFRAX = IFYToken(pool.fyToken);
+        fyFRAX = IFYToken(pool.fyToken());
         cauldron = ICauldron(ladle.cauldron());
         fraxJoin = _yield_frax_join;
 
@@ -92,8 +93,7 @@ contract YieldSpaceAMO is Owned {
         currentAMOmintedFyFRAX = 0;
         fraxLiquidityAdded = 0;
 
-        uint8 salt = keccak256(abi.encodePacked(_seriesId, "FRAXAMO"));
-        (vaultId,,) = ladle.build(_seriesId, 0x3138, salt); //0x3138 is IlkID for Frax
+        (vaultId,) = ladle.build(_seriesId, "0x3138", 0); //0x3138 is IlkID for Frax
     }
 
     /* ============== MODIFIERS ============== */
@@ -115,7 +115,7 @@ contract YieldSpaceAMO is Owned {
 
     function showAllocations() public view returns (uint256[6] memory return_arr) {
         uint256 frax_in_contract = FRAX.balanceOf(address(this));
-        uint256 frax_as_collateral = uint256(cauldron.balances(vaultId)[1]);
+        uint256 frax_as_collateral = uint256(cauldron.balances(vaultId).ink);
         uint256 frax_in_LP = FRAX.balanceOf(address(pool)) * pool.balanceOf(address(this)) / pool.totalSupply();
         uint256 fyFrax_in_contract = fyFRAX.balanceOf(address(this));
         uint256 fyFrax_in_LP = fyFRAX.balanceOf(address(pool)) * pool.balanceOf(address(this)) / pool.totalSupply();
@@ -131,19 +131,19 @@ contract YieldSpaceAMO is Owned {
     }
 
     function currFraxInAMOLP() public view returns (uint256) {
-        uint256[6] arr = showAllocations();
+        uint256[6] memory arr = showAllocations();
         return arr[2];
         // return FRAX.balanceOf(address(pool)) * pool.balanceOf(address(this)) / pool.totalSupply();
     }
     
     function currFyFraxInAMOLP() public view returns (uint256) {
-        uint256[6] arr = showAllocations();
+        uint256[6] memory arr = showAllocations();
         return arr[4];
         // return fyFRAX.balanceOf(address(pool)) * pool.balanceOf(address(this)) / pool.totalSupply();
     }
 
-    /// @return The Frax fundraised by the AMO
-    /// @return True if currFrax should be flipped in sign, ie the LP has less Frax than it began with
+    /// @return raisedFrax The Frax fundraised by the AMO
+    /// @return isNegative True if currFrax should be flipped in sign, ie the LP has less Frax than it began with
     function currentRaisedFrax() public view returns (uint256 raisedFrax, bool isNegative) {
         uint256 fraxInLP = currFraxInAMOLP();
         if (fraxInLP >= fraxLiquidityAdded) { //Frax has entered the AMO's LP
@@ -205,14 +205,14 @@ contract YieldSpaceAMO is Owned {
         //Mint fyFRAX into the pool, and sell it.
         uint256 fyFraxAmount = _fraxAmount;
         FRAX.transfer(fraxJoin, _fraxAmount);
-        ladle.pour(vaultId, pool, _fraxAmount, fyFraxAmount);
-        pool.sellFyToken(address(this), _minFraxReceived);
+        ladle.pour(vaultId, address(pool), _fraxAmount, fyFraxAmount);
+        pool.sellFYToken(address(this), _minFraxReceived);
     }
 
     /// @notice buy fyFrax from the AMO and burn it to push down rates
     function decreaseRates(uint256 _fraxAmount, uint256 _minFyFraxReceived) public view onlyByOwnGov returns (uint256) {
         //Transfer FRAX into the pool, sell it for fyFRAX into the fyFRAX contract, repay debt and withdraw FRAX collateral.
-        FRAX.transfer(pool, _fraxAmount);
+        FRAX.transfer(address(pool), _fraxAmount);
         uint256 fyFraxReceived = pool.sellBase(address(fyFRAX), _minFyFraxReceived);
         uint256 fraxCollat = fyFraxReceived;
         ladle.pour(vaultId, address(this), -fraxCollat, -fyFraxReceived);
@@ -222,8 +222,8 @@ contract YieldSpaceAMO is Owned {
     function addLiquidityToAMM(uint256 _fraxAmount, uint256 _fyFraxAmount, uint256 _minRatio, uint256 _maxRatio) public view onlyByOwnGov returns (uint256) {
         //Transfer FRAX into the pool. Transfer FRAX into the FRAX Join. Borrow fyFRAX into the pool. Add liquidity.
         FRAX.transfer(fraxJoin, _fyFraxAmount);
-        FRAX.transfer(pool, _fraxAmount);
-        ladle.pour(vaultId, pool, _fyFraxAmount, _fyFraxAmount);
+        FRAX.transfer(address(pool), _fraxAmount);
+        ladle.pour(vaultId, address(pool), _fyFraxAmount, _fyFraxAmount);
         pool.mint(address(this), address(this), _minRatio, _maxRatio); //Second param receives remainder
     }
 
@@ -232,7 +232,7 @@ contract YieldSpaceAMO is Owned {
         //Transfer pool tokens into the pool. Burn pool tokens, with the fyFRAX going into the Ladle.
         //Instruct the Ladle to repay as much debt as fyFRAX it received, and withdraw the same amount of collateral.
         pool.transfer(address(pool), _poolAmount);
-        pool.burn(address(this), ladle, _minRatio, _maxRatio);
+        pool.burn(address(this), address(ladle), _minRatio, _maxRatio);
         ladle.repayFromLadle(vaultId, address(this));
     }
 
