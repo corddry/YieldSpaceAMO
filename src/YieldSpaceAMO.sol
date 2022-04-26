@@ -107,6 +107,12 @@ contract YieldSpaceAMO is Owned {
         _;
     }
 
+     /* ============== UTILITY =============== */
+    function safeToInt(uint256 amount) private pure returns(int128){
+        require(amount < 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF, "integer casting unsafe"); //max uint in 127 bits
+        return int128(uint128(amount));
+    }
+
     /* ================ VIEWS ================ */
     // /// @notice returns current rate on Frax debt
     // function getRate() public view returns (uint256) { //TODO Name better & figure out functionality
@@ -165,75 +171,74 @@ contract YieldSpaceAMO is Owned {
     }
 
     /// @notice returns the collateral balance of the AMO for calculating FRAX’s global collateral ratio
-    /// (necessary for all Frax AMOs have this function)
-    function collatDollarBalance() public view returns (uint256) {
+    function dollarBalances() public view returns (uint256 frax_val_e18, uint256 collat_val_e18) {
+        uint precision = 1000000;
         (uint256 circFyFrax, bool circFyFraxisNegative) = circulatingAMOMintedFyFrax();
         (uint256 raisedFrax, bool raisedFraxisNegative) = currentRaisedFrax();
-        uint256 sum = currentAMOmintedFRAX * (FRAX.global_collateral_ratio() / 1000000); //TODO Make these precision constants
-        sum = raisedFraxisNegative ? sum - raisedFrax : sum + raisedFrax; 
-        sum = circFyFraxisNegative ? sum + circFyFrax : sum - circFyFrax;
-        return sum;
-        //Normal conditions: return currentAMOmintedFRAX * (FRAX.global_collateral_ratio() / 1000000) + currentRaisedFrax() - circFyFrax;
-    }
+        uint256 sum = currentAMOmintedFRAX * (FRAX.global_collateral_ratio() / precision);
+        sum = raisedFraxisNegative ? sum - raisedFrax : sum + raisedFrax; //TODO ensure nonnegative
 
-    // function dollarBalances() public view returns (uint256 frax_val_e18, uint256 collat_val_e18) {
-    //     uint256[6] arr = showAllocations();
-    //     //TODO figure this out with Dennis
-    // }
+        uint fyFraxMarketPrice = precision * pool.getFYTokenBalance() / pool.getBaseBalance(); //TODO check this formula
+        sum = circFyFraxisNegative ? sum + (circFyFrax * fyFraxMarketPrice / precision) : sum - (circFyFrax * fyFraxMarketPrice / precision);
+        return (sum, sum * fyFraxMarketPrice / precision);
+        //Normal conditions: return currentAMOmintedFRAX  + currentRaisedFrax() - circFyFrax * mkt price; 
+    }
     
     /* ========= RESTRICTED FUNCTIONS ======== */
     /// @notice mint fyFrax using FRAX as collateral 1:1 Frax to fyFrax
-    function mintFyFrax(uint256 _amount) public view onlyByOwnGov returns (uint256) { //Likely 
+    function mintFyFrax(uint128 _amount) public onlyByOwnGov {
         //Transfer FRAX to the FRAX Join, add it as collateral, and borrow.
-        uint256 fyFraxAmount = _amount;
-        uint256 fraxAmount = _amount; //1:1 collateral
-        FRAX.transfer(fraxJoin, fraxAmount);
-        ladle.pour(vaultId, address(this), fraxAmount, fyFraxAmount);
+        int128 intAmount = safeToInt(_amount);
+        FRAX.transfer(fraxJoin, _amount);
+        ladle.pour(vaultId, address(this), intAmount, intAmount);
     }
 
     /// @notice burn fyFrax to redeem FRAX collateral
-    function burnFyFrax() public view onlyByOwnGov returns (uint256) { 
+    function burnFyFrax() public onlyByOwnGov { 
         //Transfer fyFRAX to the fyFRAX contract, repay debt, and withdraw FRAX collateral.
         uint256 fyFraxAmount = fyFRAX.balanceOf(address(this));
-        uint256 fraxAmount = fyFraxAmount;
         fyFRAX.transfer(address(fyFRAX), fyFraxAmount);
-        ladle.pour(vaultId, address(this), -fraxAmount, -fyFraxAmount);
+        ladle.pour(vaultId, address(this), -safeToInt(fyFraxAmount), -safeToInt(fyFraxAmount));
     }
 
     /// @notice mint new fyFrax to sell into the AMM to push up rates 
-    function increaseRates(uint256 _fraxAmount, uint256 _minFraxReceived) public view onlyByOwnGov returns (uint256) {
+    function increaseRates(uint128 _fraxAmount, uint128 _minFraxReceived) public onlyByOwnGov {
         //Mint fyFRAX into the pool, and sell it.
         uint256 fyFraxAmount = _fraxAmount;
         FRAX.transfer(fraxJoin, _fraxAmount);
-        ladle.pour(vaultId, address(pool), _fraxAmount, fyFraxAmount);
+        ladle.pour(vaultId, address(pool), safeToInt(_fraxAmount), safeToInt(fyFraxAmount));
         pool.sellFYToken(address(this), _minFraxReceived);
+        emit ratesIncreased(_fraxAmount, _minFraxReceived);
     }
 
     /// @notice buy fyFrax from the AMO and burn it to push down rates
-    function decreaseRates(uint256 _fraxAmount, uint256 _minFyFraxReceived) public view onlyByOwnGov returns (uint256) {
+    function decreaseRates(uint128 _fraxAmount, uint128 _minFyFraxReceived) public onlyByOwnGov {
         //Transfer FRAX into the pool, sell it for fyFRAX into the fyFRAX contract, repay debt and withdraw FRAX collateral.
         FRAX.transfer(address(pool), _fraxAmount);
         uint256 fyFraxReceived = pool.sellBase(address(fyFRAX), _minFyFraxReceived);
         uint256 fraxCollat = fyFraxReceived;
-        ladle.pour(vaultId, address(this), -fraxCollat, -fyFraxReceived);
+        ladle.pour(vaultId, address(this), -safeToInt(fraxCollat), -safeToInt(fyFraxReceived));
+        emit ratesDecreased(_fraxAmount, _minFyFraxReceived);
     }
 
     /// @notice mint fyFrax tokens, pair with FRAX and provide liquidity
-    function addLiquidityToAMM(uint256 _fraxAmount, uint256 _fyFraxAmount, uint256 _minRatio, uint256 _maxRatio) public view onlyByOwnGov returns (uint256) {
+    function addLiquidityToAMM(uint128 _fraxAmount, uint128 _fyFraxAmount, uint256 _minRatio, uint256 _maxRatio) public onlyByOwnGov {
         //Transfer FRAX into the pool. Transfer FRAX into the FRAX Join. Borrow fyFRAX into the pool. Add liquidity.
         FRAX.transfer(fraxJoin, _fyFraxAmount);
         FRAX.transfer(address(pool), _fraxAmount);
-        ladle.pour(vaultId, address(pool), _fyFraxAmount, _fyFraxAmount);
+        ladle.pour(vaultId, address(pool), safeToInt(_fyFraxAmount), safeToInt(_fyFraxAmount));
         pool.mint(address(this), address(this), _minRatio, _maxRatio); //Second param receives remainder
+        emit liquidityAdded(_fraxAmount, _fyFraxAmount);
     }
 
     /// @notice remove liquidity and burn fyTokens
-    function removeLiquidityFromAMM(uint256 _poolAmount, uint256 _minRatio, uint256 _maxRatio) public view onlyByOwnGov returns (uint256) {
+    function removeLiquidityFromAMM(uint256 _poolAmount, uint256 _minRatio, uint256 _maxRatio) public onlyByOwnGov {
         //Transfer pool tokens into the pool. Burn pool tokens, with the fyFRAX going into the Ladle.
         //Instruct the Ladle to repay as much debt as fyFRAX it received, and withdraw the same amount of collateral.
         pool.transfer(address(pool), _poolAmount);
         pool.burn(address(this), address(ladle), _minRatio, _maxRatio);
         ladle.repayFromLadle(vaultId, address(this));
+        emit liquidityRemoved(_poolAmount);
     }
 
     /* === RESTRICTED GOVERNANCE FUNCTIONS === */
@@ -245,6 +250,7 @@ contract YieldSpaceAMO is Owned {
 
         // Make sure the new addresses are not address(0)
         require(timelock_address != address(0), "Invalid timelock");
+        emit AMOMinterSet(_amo_minter_address);
     }
 
     /// @notice generic proxy
@@ -258,5 +264,11 @@ contract YieldSpaceAMO is Owned {
     }
 
     /* ================ EVENTS =============== */
-    //TODO What events do we want?
+    //TODO What other events do we want?
+    event liquidityAdded(uint fraxAmount, uint fyFraxAmount);
+    event liquidityRemoved(uint poolAmount);
+    event ratesIncreased(uint fraxAmount, uint minFraxReceived);
+    event ratesDecreased(uint fraxAmount, uint minFyFraxReceived);
+    event AMOMinterSet(address amo_minter_address);
+
 }
