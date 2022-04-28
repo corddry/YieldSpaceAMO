@@ -292,11 +292,11 @@ contract YieldSpaceAMO is Owned {
         Series storage _series = series[seriesId];
         require (_series.vaultId != bytes12(0), "Series not found");
 
-        //Transfer pool tokens into the pool. Burn pool tokens, with the fyFRAX going into the Ladle.
-        //Instruct the Ladle to repay as much debt as fyFRAX it received, and withdraw the same amount of collateral.
+        //Transfer pool tokens into the pool. Burn pool tokens, with the fyFRAX going into the fyFRAX contract.
+        //Instruct the Ladle to repay as much debt as fyFRAX from the burn, and withdraw the same amount of collateral.
         _series.pool.transfer(address(_series.pool), _poolAmount);
-        _series.pool.burn(address(this), address(ladle), _minRatio, _maxRatio);
-        ladle.repayFromLadle(_series.vaultId, address(this));
+        (,, uint256 fyFraxAmount) = _series.pool.burn(address(this), _series.fyToken, _minRatio, _maxRatio);
+        ladle.pour(_series.vaultId, address(this), -safeToInt(fyFraxAmount), -safeToInt(fyFraxAmount));
         emit liquidityRemoved(_poolAmount);
     }
 
