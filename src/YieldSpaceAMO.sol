@@ -38,7 +38,6 @@ library DataTypes {
 
 interface ILadle {
     function pour(bytes12 vaultId_, address to, int128 ink, int128 art) external payable;
-    function repayFromLadle(bytes12 vaultId_, address to) external payable returns (uint256 repaid);
     function build(bytes6 seriesId, bytes6 ilkId, uint8 salt) external returns (bytes12 vaultId, DataTypes.Vault memory vault);
     function cauldron() external view returns (ICauldron);
 }
