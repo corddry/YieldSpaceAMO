@@ -97,8 +97,7 @@ contract YieldSpaceAMO is Owned {
     // AMO
     uint256 public currentAMOmintedFRAX; /// @notice The amount of FRAX tokens minted by the AMO
     uint256 public currentAMOmintedFyFRAX;
-    uint256 public fraxLiquidityAdded; /// @notice The amount FRAX added to LP
-    uint256 public fyFraxLiquidityAdded;
+    uint256 public fraxLiquidityAdded; /// @notice The amount FRAX used to LP
 
     /* ============= CONSTRUCTOR ============= */
     constructor (
@@ -177,7 +176,7 @@ contract YieldSpaceAMO is Owned {
             fyFraxValue += _series.pool.sellFYTokenPreview(fyFraxAmount.u128());
         }
 
-        valueAsFrax = fraxValue + fyFraxValue - fraxLiquidityAdded - fyFraxLiquidityAdded;
+        valueAsFrax = fraxValue + fyFraxValue - fraxLiquidityAdded;
         valueAsCollateral = 0; // TODO: What is this, exactly?
 
         //Normal conditions: return currentAMOmintedFRAX  + currentRaisedFrax() - circFyFrax * mkt price; 
@@ -274,10 +273,12 @@ contract YieldSpaceAMO is Owned {
         require (_series.vaultId != bytes12(0), "Series not found");
 
         //Transfer FRAX into the pool. Transfer FRAX into the FRAX Join. Borrow fyFRAX into the pool. Add liquidity.
+        fraxLiquidityAdded = fraxLiquidityAdded + fraxAmount + fyFraxAmount;
         FRAX.transfer(fraxJoin, fyFraxAmount);
         FRAX.transfer(address(_series.pool), fraxAmount);
         ladle.pour(_series.vaultId, address(_series.pool), fyFraxAmount.i128(), fyFraxAmount.i128());
         _series.pool.mint(address(this), address(this), minRatio, maxRatio); //Second param receives remainder
+        // TODO: Shouldn't we also store and update a FRAX/LP price, to reduce fraxLiquidityAdded when we remove liquidity at the LP price?
         emit liquidityAdded(fraxAmount, fyFraxAmount);
     }
 
@@ -289,8 +290,9 @@ contract YieldSpaceAMO is Owned {
         //Transfer pool tokens into the pool. Burn pool tokens, with the fyFRAX going into the fyFRAX contract.
         //Instruct the Ladle to repay as much debt as fyFRAX from the burn, and withdraw the same amount of collateral.
         _series.pool.transfer(address(_series.pool), _poolAmount);
-        (,, uint256 fyFraxAmount) = _series.pool.burn(address(this), _series.fyToken, minRatio, maxRatio);
+        (,uint256 fraxAmount, uint256 fyFraxAmount) = _series.pool.burn(address(this), address(_series.fyToken), minRatio, maxRatio);
         ladle.pour(_series.vaultId, address(this), -(fyFraxAmount.i128()), -(fyFraxAmount).i128());
+        fraxLiquidityAdded = fraxLiquidityAdded - fraxAmount - fyFraxAmount; // TODO: I'm not sure this is right, shouldn't we subtract the amount of FRAX that we used to mint the LP tokens?
         emit liquidityRemoved(_poolAmount);
     }
 
