@@ -257,7 +257,7 @@ contract YieldSpaceAMO is Owned {
 
     /// @notice recover Frax from an amount of fyFrax, repaying or redeeming.
     /// Before maturity, if there isn't enough debt to convert all the fyFrax into Frax, the surplus
-    /// will be stored in the AMO.
+    /// will be stored in the AMO. Calling this function after maturity will redeem the surplus.
     /// @dev The fyFrax to work with needs to be in the AMO already.
     /// @param seriesId fyFrax series being burned
     /// @param to destination for the frax recovered
