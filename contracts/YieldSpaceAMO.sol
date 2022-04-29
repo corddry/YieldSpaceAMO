@@ -215,23 +215,22 @@ contract YieldSpaceAMO is Owned {
 
     /// @notice remove a new series in the AMO, to keep gas costs in place
     /// @param seriesId the series being removed
-    function removeSeries(bytes6 seriesId) public onlyByOwnGov {
+    /// @param seriesIndex the index in the seriesIterator for the series being removed
+    function removeSeries(bytes6 seriesId, uint256 seriesIndex) public onlyByOwnGov {
+        require (seriesId == seriesIterator[seriesIndex], "Index mismatch");
         Series storage _series = series[seriesId];
         require (_series.vaultId != bytes12(0), "Series not found");
         require (_series.fyToken.balanceOf(address(this)) == 0, "Outstanding fyToken balance");
         require (_series.pool.balanceOf(address(this)) == 0, "Outstanding pool balance");
+
         delete series[seriesId];
 
         // Remove the seriesId from the iterator, by replacing for the tail and popping.
         uint256 activeSeries = seriesIterator.length;
-        for (uint256 s; s < activeSeries; ++s) {
-            if (seriesId == seriesIterator[s]) {
-                if (s < activeSeries - 1) {
-                    seriesIterator[s] = seriesIterator[activeSeries - 1];
-                }
-                seriesIterator.pop();
-            }
+        if (seriesIndex < activeSeries - 1) {
+            seriesIterator[seriesIndex] = seriesIterator[activeSeries - 1];
         }
+        seriesIterator.pop();
     }
 
     /// @notice mint fyFrax using FRAX as collateral 1:1 Frax to fyFrax
