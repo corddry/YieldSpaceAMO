@@ -77,6 +77,7 @@ contract YieldSpaceAMO is Owned {
         bytes12 vaultId; /// @notice The AMO's debt & collateral record for this series
         IFYToken fyToken;
         IPool pool;
+        uint96 maturity;
     }
 
     /* =========== STATE VARIABLES =========== */
@@ -167,6 +168,7 @@ contract YieldSpaceAMO is Owned {
 
     /// @notice Return the value of all AMO assets in Frax terms.
     function currentFrax() public view returns (uint256 fraxAmount) {
+        // Add value from Frax in the AMO
         fraxAmount = FRAX.balanceOf(address(this));
 
         // Add up the amount of FRAX in LP positions
@@ -176,8 +178,13 @@ contract YieldSpaceAMO is Owned {
             bytes6 seriesId = seriesIterator[s];
             Series storage _series = series[seriesId];
             uint256 poolShare = 1e18 * _series.pool.balanceOf(address(this)) / _series.pool.totalSupply();
+            
+            // Add value from Frax in LP positions
             fraxAmount += FRAX.balanceOf(address(_series.pool)) * poolShare / 1e18;
-            uint256 fyFraxAmount = _series.fyToken.balanceOf(address(_series.pool)) * poolShare / 1e18;
+            
+            // Add value from fyFrax in the AMO and LP positions
+            uint256 fyFraxAmount = _series.fyToken.balanceOf(address(this));
+            fyFraxAmount += _series.fyToken.balanceOf(address(_series.pool)) * poolShare / 1e18;
             fraxAmount += fraxValue(seriesId, fyFraxAmount);
         }
     }
@@ -190,6 +197,7 @@ contract YieldSpaceAMO is Owned {
     
     /* ========= RESTRICTED FUNCTIONS ======== */
     /// @notice register a new series in the AMO
+    /// @param seriesId the series being added
     function addSeries(bytes6 seriesId, IFYToken fyToken, IPool pool) public onlyByOwnGov {
         require (ladle.pools(seriesId) == pool, "Mismatched pool");
         require (cauldron.series(seriesId).fyToken == fyToken, "Mismatched fyToken");
@@ -198,13 +206,15 @@ contract YieldSpaceAMO is Owned {
         series[seriesId] = Series({
             vaultId : vaultId,
             fyToken : fyToken,
-            pool : pool
+            pool : pool,
+            maturity: uint96(fyToken.maturity()) // Will work for a while.
         });
 
         seriesIterator.push(seriesId);
     }
 
     /// @notice remove a new series in the AMO, to keep gas costs in place
+    /// @param seriesId the series being removed
     function removeSeries(bytes6 seriesId) public onlyByOwnGov {
         Series storage _series = series[seriesId];
         require (_series.vaultId != bytes12(0), "Series not found");
@@ -225,108 +235,198 @@ contract YieldSpaceAMO is Owned {
     }
 
     /// @notice mint fyFrax using FRAX as collateral 1:1 Frax to fyFrax
-    function mintFyFrax(bytes6 seriesId, uint128 amount) public onlyByOwnGov {
+    /// @dev The Frax to work with needs to be in the AMO already.
+    /// @param seriesId fyFrax series being minted
+    /// @param to destination for the fyFrax
+    /// @param fraxAmount amount of Frax being used to mint fyFrax at 1:1
+    function mintFyFrax(
+        bytes6 seriesId,
+        address to,
+        uint128 fraxAmount
+    )
+        public onlyByOwnGov
+    {
         Series storage _series = series[seriesId];
         require (_series.vaultId != bytes12(0), "Series not found");
 
         //Transfer FRAX to the FRAX Join, add it as collateral, and borrow.
-        int128 _amount = uint256(amount).i128(); // `using` doesn't work with function overloading
-        FRAX.transfer(fraxJoin, amount);
-        ladle.pour(_series.vaultId, address(this), _amount, _amount);
+        int128 _fraxAmount = uint256(fraxAmount).i128(); // `using` doesn't work with function overloading
+        FRAX.transfer(fraxJoin, fraxAmount);
+        ladle.pour(_series.vaultId, to, _fraxAmount, _fraxAmount);
     }
 
-    /// @notice burn fyFrax to redeem FRAX collateral
-    function burnFyFrax(bytes6 seriesId) public onlyByOwnGov { 
+    /// @notice recover Frax from an amount of fyFrax, repaying or redeeming.
+    /// Before maturity, if there isn't enough debt to convert all the fyFrax into Frax, the surplus
+    /// will be stored in the AMO.
+    /// @dev The fyFrax to work with needs to be in the AMO already.
+    /// @param seriesId fyFrax series being burned
+    /// @param to destination for the frax recovered
+    /// @param fyFraxAmount amount of fyFrax being burned
+    /// @return fraxAmount amount of Frax recovered
+    /// @return fyFraxAmount amount of fyFrax stored in the AMO
+    function burnFyFrax(
+        bytes6 seriesId,
+        address to,
+        uint128 fyFraxAmount,
+    )
+        public onlyByOwnGov
+        returns (uint256 fraxAmount, fyFraxAmount)
+    { 
         Series storage _series = series[seriesId];
         require (_series.vaultId != bytes12(0), "Series not found");
 
-        //Transfer fyFRAX to the fyFRAX contract, repay debt, and withdraw FRAX collateral.
-        uint256 fyFraxAmount = _series.fyToken.balanceOf(address(this));
-        int128 _fyFraxAmount = fyFraxAmount.i128();
-        _series.fyToken.transfer(address(_series.fyToken), fyFraxAmount);
-        ladle.pour(_series.vaultId, address(this), -_fyFraxAmount, -_fyFraxAmount);
+        if (_series.maturity < block.timestamp) { // At maturity, forget about debt and redeem at 1:1
+            _series.fyToken.transfer(address(_series.fyToken), fyFraxAmount);
+            fraxAmount = _series.fyToken.redeem(to, fyFraxAmount);
+        } else { // Before maturity, repay as much debt as possible, and keep any surplus fyFrax
+            uint256 debt = cauldron.balances(series[seriesId].vaultId).art;
+            (fraxAmount, fyFraxAmount) = debt > fyFraxAmount ? (fyFraxAmount, 0) : (debt, fyFraxAmount - debt)); // After this, `fyFraxAmount` has the surplus.
+
+            _series.fyToken.transfer(address(_series.fyToken), fraxAmount);
+            ladle.pour(_series.vaultId, to, -(fraxAmount.i128()), -(fraxAmount.i128()));
+        }
     }
 
     /// @notice mint new fyFrax to sell into the AMM to push up rates 
-    function increaseRates(bytes6 seriesId, uint128 fraxAmount, uint128 minFraxReceived) public onlyByOwnGov {
+    /// @dev The Frax to work with needs to be in the AMO already.
+    /// @param seriesId fyFrax series we are increasing the rates for
+    /// @param to destination for the frax recovered, usually the AMO
+    /// @param fraxAmount amount of Frax being converted to fyFrax and sold
+    /// @param minFraxReceived minimum amount of Frax to receive in the sale
+    /// @return fraxReceived amount of Frax received in the sale
+    function increaseRates(
+        bytes6 seriesId,
+        address to,
+        uint128 fraxAmount,
+        uint128 minFraxReceived
+    )
+        public onlyByOwnGov
+        returns (uint256 fraxReceived)
+    {
         Series storage _series = series[seriesId];
         require (_series.vaultId != bytes12(0), "Series not found");
 
         //Mint fyFRAX into the pool, and sell it.
-        uint256 fyFraxAmount = fraxAmount;
-        FRAX.transfer(fraxJoin, fraxAmount);
-        ladle.pour(_series.vaultId, address(_series.pool), fraxAmount.i128(), fyFraxAmount.i128());
-        _series.pool.sellFYToken(address(this), minFraxReceived);
-        emit ratesIncreased(fraxAmount, minFraxReceived);
+        mintFyFrax(seriesId, address(_series.pool), fraxAmount);
+        fraxReceived = _series.pool.sellFYToken(to, minFraxReceived);
+        emit RatesIncreased(fraxAmount, fraxReceived);
     }
 
     /// @notice buy fyFrax from the AMO and burn it to push down rates
-    function decreaseRates(bytes6 seriesId, uint128 fraxAmount, uint128 minFyFraxReceived) public onlyByOwnGov {
+    /// @dev The Frax to work with needs to be in the AMO already.
+    /// @param seriesId fyFrax series we are decreasing the rates for
+    /// @param to destination for the frax recovered, usually the AMO
+    /// @param fraxAmount amount of Frax being sold for fyFrax
+    /// @param minFyFraxReceived minimum amount of fyFrax in the sale
+    /// @return fraxReceived amount of Frax received after selling and burning
+    /// @return fyFraxStored amount of fyFrax stored in the AMO, if any
+    function decreaseRates(
+        bytes6 seriesId,
+        address to,
+        uint128 fraxAmount,
+        uint128 minFyFraxReceived
+    )
+        public onlyByOwnGov
+        returns (uint256 fraxReceived, uint256 fyFraxStored)
+    {
         Series storage _series = series[seriesId];
         require (_series.vaultId != bytes12(0), "Series not found");
 
         //Transfer FRAX into the pool, sell it for fyFRAX into the fyFRAX contract, repay debt and withdraw FRAX collateral.
         FRAX.transfer(address(_series.pool), fraxAmount);
         uint256 fyFraxReceived = _series.pool.sellBase(address(_series.fyToken), minFyFraxReceived);
-        uint256 fraxCollat = fyFraxReceived;
-        ladle.pour(_series.vaultId, address(this), -(fraxCollat.i128()), -(fyFraxReceived.i128()));
-        emit ratesDecreased(fraxAmount, minFyFraxReceived);
+        (fraxReceived, fyFraxStored) = burnFyFrax(seriesId, to, fyFraxReceived.u128());
+        emit RatesDecreased(fraxAmount, fraxReceived);
     }
 
     /// @notice mint fyFrax tokens, pair with FRAX and provide liquidity
-    function addLiquidityToAMM(bytes6 seriesId, uint128 fraxAmount, uint128 fyFraxAmount, uint256 minRatio, uint256 maxRatio) public onlyByOwnGov {
+    /// @dev The Frax to work with needs to be in the AMO already.
+    /// @param seriesId fyFrax series we are adding liquidity for
+    /// @param to destination for the pool tokens minted, usually the AMO
+    /// @param remainder destination for any unused Frax, usually the AMO
+    /// @param fraxAmount amount of Frax being provided as liquidity
+    /// @param fyFraxAmount amount of fyFrax being provided as liquidity
+    /// @param minRatio minimum Frax/fyFrax ratio accepted in the pool
+    /// @param maxRatio maximum Frax/fyFrax ratio accepted in the pool
+    /// @return fraxUsed amount of Frax used for minting, it could be less than `fraxAmount`
+    /// @return poolMinted amount of pool tokens minted
+    function addLiquidityToAMM(
+        bytes6 seriesId,
+        address to,
+        address remainder,
+        uint128 fraxAmount,
+        uint128 fyFraxAmount,
+        uint256 minRatio,
+        uint256 maxRatio
+    )
+        public onlyByOwnGov
+        returns (uint256 fraxUsed, uint256 poolMinted)
+    {
         Series storage _series = series[seriesId];
         require (_series.vaultId != bytes12(0), "Series not found");
 
         //Transfer FRAX into the pool. Transfer FRAX into the FRAX Join. Borrow fyFRAX into the pool. Add liquidity.
-        FRAX.transfer(fraxJoin, fyFraxAmount);
+        mintFyFrax(seriesId, address(_series.pool), fyFraxAmount);
         FRAX.transfer(address(_series.pool), fraxAmount);
-        ladle.pour(_series.vaultId, address(_series.pool), fyFraxAmount.i128(), fyFraxAmount.i128());
-        _series.pool.mint(address(this), address(this), minRatio, maxRatio); //Second param receives remainder
-        emit liquidityAdded(fraxAmount, fyFraxAmount);
+        (fraxUsed,, poolMinted) = _series.pool.mint(to, remainder, minRatio, maxRatio); //Second param receives remainder
+        emit LiquidityAdded(fraxUsed, poolMinted);
     }
 
     /// @notice remove liquidity and burn fyTokens
-    function removeLiquidityFromAMM(bytes6 seriesId, uint256 _poolAmount, uint256 minRatio, uint256 maxRatio) public onlyByOwnGov {
+    /// @dev The pool tokens to work with need to be in the AMO already.
+    /// @param seriesId fyFrax series we are adding liquidity for
+    /// @param to destination for the Frax obtained, usually the AMO
+    /// @param poolAmount amount of pool tokens being removed as liquidity
+    /// @param minRatio minimum Frax/fyFrax ratio accepted in the pool
+    /// @param maxRatio maximum Frax/fyFrax ratio accepted in the pool
+    /// @return fraxReceived amount of Frax received after removing liquidity and burning
+    /// @return fyFraxStored amount of fyFrax stored in the AMO, if any
+    function removeLiquidityFromAMM(
+        bytes6 seriesId,
+        address to,
+        uint256 poolAmount,
+        uint256 minRatio,
+        uint256 maxRatio
+    ) public onlyByOwnGov returns (uint256 fraxReceived, uint256 fyFraxStored) {
         Series storage _series = series[seriesId];
         require (_series.vaultId != bytes12(0), "Series not found");
 
         //Transfer pool tokens into the pool. Burn pool tokens, with the fyFRAX going into the fyFRAX contract.
         //Instruct the Ladle to repay as much debt as fyFRAX from the burn, and withdraw the same amount of collateral.
-        _series.pool.transfer(address(_series.pool), _poolAmount);
-        (,uint256 fraxAmount, uint256 fyFraxAmount) = _series.pool.burn(address(this), address(_series.fyToken), minRatio, maxRatio);
-        ladle.pour(_series.vaultId, address(this), -(fyFraxAmount.i128()), -(fyFraxAmount).i128());
-        emit liquidityRemoved(_poolAmount);
+        _series.pool.transfer(address(_series.pool), poolAmount);
+        (,, uint256 fyFraxAmount) = _series.pool.burn(to, address(_series.fyToken), minRatio, maxRatio);
+        (fraxReceived, fyFraxStored) = burnFyFrax(seriesId, to, fyFraxAmount.u128());
+        emit LiquidityRemoved(fraxReceived, poolAmount);
     }
 
     /* === RESTRICTED GOVERNANCE FUNCTIONS === */
-    function setAMOMinter(address _amo_minter_address) external onlyByOwnGov {
-        amo_minter = IFraxAMOMinter(_amo_minter_address);
+    function setAMOMinter(IFraxAMOMinter _amo_minter) external onlyByOwnGov {
+        amo_minter = _amo_minter;
 
         // Get the timelock addresses from the minter
-        timelock_address = amo_minter.timelock_address();
+        timelock_address = _amo_minter.timelock_address();
 
         // Make sure the new addresses are not address(0)
         require (timelock_address != address(0), "Invalid timelock");
-        emit AMOMinterSet(_amo_minter_address);
+        emit AMOMinterSet(address(_amo_minter));
     }
 
     /// @notice generic proxy
     function execute(
-        address _to,
-        uint256 _value,
-        bytes calldata _data
+        address to,
+        uint256 value,
+        bytes calldata data
     ) external onlyByOwnGov returns (bool, bytes memory) {
-        (bool success, bytes memory result) = _to.call{value:_value}(_data);
+        (bool success, bytes memory result) = to.call{value:value}(data);
         return (success, result);
     }
 
     /* ================ EVENTS =============== */
     //TODO What other events do we want?
-    event liquidityAdded(uint fraxAmount, uint fyFraxAmount);
-    event liquidityRemoved(uint poolAmount);
-    event ratesIncreased(uint fraxAmount, uint minFraxReceived);
-    event ratesDecreased(uint fraxAmount, uint minFyFraxReceived);
+    event LiquidityAdded(uint fraxUsed, uint poolMinted);
+    event LiquidityRemoved(uint fraxReceived, uint poolBurned);
+    event RatesIncreased(uint fraxUsed, uint fraxReceived);
+    event RatesDecreased(uint fraxUsed, uint fraxReceived);
     event AMOMinterSet(address amo_minter_address);
 
 }
