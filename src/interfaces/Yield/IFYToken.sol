@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
-import "../utils/IERC20.sol";
+pragma solidity 0.8.13;
+import "../IERC20.sol";
 
 interface IFYToken is IERC20 {
     /// @dev Asset that is returned on redemption.

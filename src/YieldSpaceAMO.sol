@@ -81,7 +81,7 @@ contract YieldSpaceAMO is Owned {
     }
 
     /* =========== STATE VARIABLES =========== */
-    
+
     // Frax
     IFrax private immutable FRAX;
     IFraxAMOMinter private amo_minter;
@@ -147,7 +147,7 @@ contract YieldSpaceAMO is Owned {
         uint256 LP_owned = _series.pool.balanceOf(address(this));
         return [
             frax_in_contract,       // [0] Unallocated Frax
-            frax_as_collateral,     // [1] Frax being used as collateral to borrow fyFrax                     
+            frax_as_collateral,     // [1] Frax being used as collateral to borrow fyFrax
             frax_in_LP,             // [2] The Frax our LP tokens can lay claim to
             fyFrax_in_contract,     // [3] fyFrax sitting in AMO, should be 0
             fyFrax_in_LP,           // [4] fyFrax our LP can claim
@@ -178,10 +178,10 @@ contract YieldSpaceAMO is Owned {
             bytes6 seriesId = seriesIterator[s];
             Series storage _series = series[seriesId];
             uint256 poolShare = 1e18 * _series.pool.balanceOf(address(this)) / _series.pool.totalSupply();
-            
+
             // Add value from Frax in LP positions
             fraxAmount += FRAX.balanceOf(address(_series.pool)) * poolShare / 1e18;
-            
+
             // Add value from fyFrax in the AMO and LP positions
             uint256 fyFraxAmount = _series.fyToken.balanceOf(address(this));
             fyFraxAmount += _series.fyToken.balanceOf(address(_series.pool)) * poolShare / 1e18;
@@ -194,7 +194,7 @@ contract YieldSpaceAMO is Owned {
         valueAsFrax = currentFrax();
         valueAsCollateral = valueAsFrax * FRAX.global_collateral_ratio() / 1e6; // This assumes that FRAX.global_collateral_ratio() has 6 decimals
     }
-    
+
     /* ========= RESTRICTED FUNCTIONS ======== */
     /// @notice register a new series in the AMO
     /// @param seriesId the series being added
@@ -215,22 +215,23 @@ contract YieldSpaceAMO is Owned {
 
     /// @notice remove a new series in the AMO, to keep gas costs in place
     /// @param seriesId the series being removed
-    /// @param seriesIndex the index in the seriesIterator for the series being removed
-    function removeSeries(bytes6 seriesId, uint256 seriesIndex) public onlyByOwnGov {
-        require (seriesId == seriesIterator[seriesIndex], "Index mismatch");
+    function removeSeries(bytes6 seriesId) public onlyByOwnGov {
         Series storage _series = series[seriesId];
         require (_series.vaultId != bytes12(0), "Series not found");
         require (_series.fyToken.balanceOf(address(this)) == 0, "Outstanding fyToken balance");
         require (_series.pool.balanceOf(address(this)) == 0, "Outstanding pool balance");
-
         delete series[seriesId];
 
         // Remove the seriesId from the iterator, by replacing for the tail and popping.
         uint256 activeSeries = seriesIterator.length;
-        if (seriesIndex < activeSeries - 1) {
-            seriesIterator[seriesIndex] = seriesIterator[activeSeries - 1];
+        for (uint256 s; s < activeSeries; ++s) {
+            if (seriesId == seriesIterator[s]) {
+                if (s < activeSeries - 1) {
+                    seriesIterator[s] = seriesIterator[activeSeries - 1];
+                }
+                seriesIterator.pop();
+            }
         }
-        seriesIterator.pop();
     }
 
     /// @notice mint fyFrax using FRAX as collateral 1:1 Frax to fyFrax
@@ -281,7 +282,7 @@ contract YieldSpaceAMO is Owned {
     )
         public onlyByOwnGov
         returns (uint256 fraxAmount, fyFraxAmount)
-    { 
+    {
         Series storage _series = series[seriesId];
         require (_series.vaultId != bytes12(0), "Series not found");
 
@@ -304,7 +305,7 @@ contract YieldSpaceAMO is Owned {
     )
         public onlyByOwnGov
         returns (uint256 fraxAmount, fyFraxAmount)
-    { 
+    {
         if (_series.maturity < block.timestamp) { // At maturity, forget about debt and redeem at 1:1
             _series.fyToken.transfer(address(_series.fyToken), fyFraxAmount);
             fraxAmount = _series.fyToken.redeem(to, fyFraxAmount);
@@ -317,7 +318,7 @@ contract YieldSpaceAMO is Owned {
         }
     }
 
-    /// @notice mint new fyFrax to sell into the AMM to push up rates 
+    /// @notice mint new fyFrax to sell into the AMM to push up rates
     /// @dev The Frax to work with needs to be in the AMO already.
     /// @param seriesId fyFrax series we are increasing the rates for
     /// @param fraxAmount amount of Frax being converted to fyFrax and sold
