@@ -237,37 +237,48 @@ contract YieldSpaceAMO is Owned {
     /// @notice mint fyFrax using FRAX as collateral 1:1 Frax to fyFrax
     /// @dev The Frax to work with needs to be in the AMO already.
     /// @param seriesId fyFrax series being minted
-    /// @param to destination for the fyFrax
     /// @param fraxAmount amount of Frax being used to mint fyFrax at 1:1
     function mintFyFrax(
         bytes6 seriesId,
-        address to,
         uint128 fraxAmount
     )
         public onlyByOwnGov
     {
         Series storage _series = series[seriesId];
         require (_series.vaultId != bytes12(0), "Series not found");
+        _mintFyFrax(_series, address(this), fraxAmount);
+    }
 
+    /// @notice mint fyFrax using FRAX as collateral 1:1 Frax to fyFrax
+    /// @dev The Frax to work with needs to be in the AMO already.
+    /// @param series fyFrax series being minted
+    /// @param to destination for the fyFrax
+    /// @param fraxAmount amount of Frax being used to mint fyFrax at 1:1
+    function _mintFyFrax(
+        Series _series,
+        address to,
+        uint128 fraxAmount
+    )
+        public onlyByOwnGov
+    {
         //Transfer FRAX to the FRAX Join, add it as collateral, and borrow.
         int128 _fraxAmount = uint256(fraxAmount).i128(); // `using` doesn't work with function overloading
         FRAX.transfer(fraxJoin, fraxAmount);
         ladle.pour(_series.vaultId, to, _fraxAmount, _fraxAmount);
     }
 
+
     /// @notice recover Frax from an amount of fyFrax, repaying or redeeming.
     /// Before maturity, if there isn't enough debt to convert all the fyFrax into Frax, the surplus
     /// will be stored in the AMO. Calling this function after maturity will redeem the surplus.
     /// @dev The fyFrax to work with needs to be in the AMO already.
     /// @param seriesId fyFrax series being burned
-    /// @param to destination for the frax recovered
     /// @param fyFraxAmount amount of fyFrax being burned
     /// @return fraxAmount amount of Frax recovered
     /// @return fyFraxAmount amount of fyFrax stored in the AMO
     function burnFyFrax(
         bytes6 seriesId,
-        address to,
-        uint128 fyFraxAmount,
+        uint128 fyFraxAmount
     )
         public onlyByOwnGov
         returns (uint256 fraxAmount, fyFraxAmount)
@@ -275,6 +286,26 @@ contract YieldSpaceAMO is Owned {
         Series storage _series = series[seriesId];
         require (_series.vaultId != bytes12(0), "Series not found");
 
+        _burnFyFrax(_series, address(this), fyFraxAmount)
+    }
+
+    /// @notice recover Frax from an amount of fyFrax, repaying or redeeming.
+    /// Before maturity, if there isn't enough debt to convert all the fyFrax into Frax, the surplus
+    /// will be stored in the AMO. Calling this function after maturity will redeem the surplus.
+    /// @dev The fyFrax to work with needs to be in the AMO already.
+    /// @param series fyFrax series being burned
+    /// @param to destination for the frax recovered
+    /// @param fyFraxAmount amount of fyFrax being burned
+    /// @return fraxAmount amount of Frax recovered
+    /// @return fyFraxAmount amount of fyFrax stored in the AMO
+    function _burnFyFrax(
+        Series _series,
+        address to,
+        uint128 fyFraxAmount,
+    )
+        public onlyByOwnGov
+        returns (uint256 fraxAmount, fyFraxAmount)
+    { 
         if (_series.maturity < block.timestamp) { // At maturity, forget about debt and redeem at 1:1
             _series.fyToken.transfer(address(_series.fyToken), fyFraxAmount);
             fraxAmount = _series.fyToken.redeem(to, fyFraxAmount);
@@ -290,13 +321,11 @@ contract YieldSpaceAMO is Owned {
     /// @notice mint new fyFrax to sell into the AMM to push up rates 
     /// @dev The Frax to work with needs to be in the AMO already.
     /// @param seriesId fyFrax series we are increasing the rates for
-    /// @param to destination for the frax recovered, usually the AMO
     /// @param fraxAmount amount of Frax being converted to fyFrax and sold
     /// @param minFraxReceived minimum amount of Frax to receive in the sale
     /// @return fraxReceived amount of Frax received in the sale
     function increaseRates(
         bytes6 seriesId,
-        address to,
         uint128 fraxAmount,
         uint128 minFraxReceived
     )
@@ -307,22 +336,20 @@ contract YieldSpaceAMO is Owned {
         require (_series.vaultId != bytes12(0), "Series not found");
 
         //Mint fyFRAX into the pool, and sell it.
-        mintFyFrax(seriesId, address(_series.pool), fraxAmount);
-        fraxReceived = _series.pool.sellFYToken(to, minFraxReceived);
+        _mintFyFrax(_series, address(_series.pool), fraxAmount);
+        fraxReceived = _series.pool.sellFYToken(address(this), minFraxReceived);
         emit RatesIncreased(fraxAmount, fraxReceived);
     }
 
     /// @notice buy fyFrax from the AMO and burn it to push down rates
     /// @dev The Frax to work with needs to be in the AMO already.
     /// @param seriesId fyFrax series we are decreasing the rates for
-    /// @param to destination for the frax recovered, usually the AMO
     /// @param fraxAmount amount of Frax being sold for fyFrax
     /// @param minFyFraxReceived minimum amount of fyFrax in the sale
     /// @return fraxReceived amount of Frax received after selling and burning
     /// @return fyFraxStored amount of fyFrax stored in the AMO, if any
     function decreaseRates(
         bytes6 seriesId,
-        address to,
         uint128 fraxAmount,
         uint128 minFyFraxReceived
     )
@@ -335,15 +362,13 @@ contract YieldSpaceAMO is Owned {
         //Transfer FRAX into the pool, sell it for fyFRAX into the fyFRAX contract, repay debt and withdraw FRAX collateral.
         FRAX.transfer(address(_series.pool), fraxAmount);
         uint256 fyFraxReceived = _series.pool.sellBase(address(_series.fyToken), minFyFraxReceived);
-        (fraxReceived, fyFraxStored) = burnFyFrax(seriesId, to, fyFraxReceived.u128());
+        (fraxReceived, fyFraxStored) = burnFyFrax(_series, address(this), fyFraxReceived.u128());
         emit RatesDecreased(fraxAmount, fraxReceived);
     }
 
     /// @notice mint fyFrax tokens, pair with FRAX and provide liquidity
     /// @dev The Frax to work with needs to be in the AMO already.
     /// @param seriesId fyFrax series we are adding liquidity for
-    /// @param to destination for the pool tokens minted, usually the AMO
-    /// @param remainder destination for any unused Frax, usually the AMO
     /// @param fraxAmount amount of Frax being provided as liquidity
     /// @param fyFraxAmount amount of fyFrax being provided as liquidity
     /// @param minRatio minimum Frax/fyFrax ratio accepted in the pool
@@ -352,8 +377,6 @@ contract YieldSpaceAMO is Owned {
     /// @return poolMinted amount of pool tokens minted
     function addLiquidityToAMM(
         bytes6 seriesId,
-        address to,
-        address remainder,
         uint128 fraxAmount,
         uint128 fyFraxAmount,
         uint256 minRatio,
@@ -366,16 +389,15 @@ contract YieldSpaceAMO is Owned {
         require (_series.vaultId != bytes12(0), "Series not found");
 
         //Transfer FRAX into the pool. Transfer FRAX into the FRAX Join. Borrow fyFRAX into the pool. Add liquidity.
-        mintFyFrax(seriesId, address(_series.pool), fyFraxAmount);
+        _mintFyFrax(seriesId, address(_series.pool), fyFraxAmount);
         FRAX.transfer(address(_series.pool), fraxAmount);
-        (fraxUsed,, poolMinted) = _series.pool.mint(to, remainder, minRatio, maxRatio); //Second param receives remainder
+        (fraxUsed,, poolMinted) = _series.pool.mint(address(this), address(this), minRatio, maxRatio); //Second param receives remainder
         emit LiquidityAdded(fraxUsed, poolMinted);
     }
 
     /// @notice remove liquidity and burn fyTokens
     /// @dev The pool tokens to work with need to be in the AMO already.
     /// @param seriesId fyFrax series we are adding liquidity for
-    /// @param to destination for the Frax obtained, usually the AMO
     /// @param poolAmount amount of pool tokens being removed as liquidity
     /// @param minRatio minimum Frax/fyFrax ratio accepted in the pool
     /// @param maxRatio maximum Frax/fyFrax ratio accepted in the pool
@@ -383,7 +405,6 @@ contract YieldSpaceAMO is Owned {
     /// @return fyFraxStored amount of fyFrax stored in the AMO, if any
     function removeLiquidityFromAMM(
         bytes6 seriesId,
-        address to,
         uint256 poolAmount,
         uint256 minRatio,
         uint256 maxRatio
@@ -394,8 +415,8 @@ contract YieldSpaceAMO is Owned {
         //Transfer pool tokens into the pool. Burn pool tokens, with the fyFRAX going into the fyFRAX contract.
         //Instruct the Ladle to repay as much debt as fyFRAX from the burn, and withdraw the same amount of collateral.
         _series.pool.transfer(address(_series.pool), poolAmount);
-        (,, uint256 fyFraxAmount) = _series.pool.burn(to, address(_series.fyToken), minRatio, maxRatio);
-        (fraxReceived, fyFraxStored) = burnFyFrax(seriesId, to, fyFraxAmount.u128());
+        (,, uint256 fyFraxAmount) = _series.pool.burn(address(this), address(_series.fyToken), minRatio, maxRatio);
+        (fraxReceived, fyFraxStored) = _burnFyFrax(_series, address(this), fyFraxAmount.u128());
         emit LiquidityRemoved(fraxReceived, poolAmount);
     }
 
