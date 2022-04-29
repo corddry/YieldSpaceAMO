@@ -163,20 +163,17 @@ contract YieldSpaceAMO is Owned {
         // If so, shouldn't we get the Frax held by this contract instead?
         uint256 precision = 1e6;
         uint256 fraxValue = currentAMOmintedFRAX * FRAX.global_collateral_ratio() / precision;
-
-        // Amount of FRAX in LP positions
-        uint256 activeSeries = seriesIterator.length;
-        for (uint256 s; s < activeSeries; ++s) {
-            IPool pool = series[seriesIterator[s]].pool;
-            fraxValue += FRAX.balanceOf(address(pool)) * pool.balanceOf(address(this)) / pool.totalSupply();
-        }
-
-        // Add up the value in Frax from all fyFRAX LP positions
         uint256 fyFraxValue;
+
+        // Add up the amount of FRAX in LP positions
+        // Add up the value in Frax from all fyFRAX LP positions
+        uint256 activeSeries = seriesIterator.length;
         for (uint256 s; s < activeSeries; ++s) {
             bytes6 seriesId = seriesIterator[s];
             Series storage _series = series[seriesId];
-            uint256 fyFrax = _series.fyToken.balanceOf(address(_series.pool)) * _series.pool.balanceOf(address(this)) / _series.pool.totalSupply(); // Mild overflow panic risk
+            uint256 share = 1e18 * _series.pool.balanceOf(address(this)) / _series.pool.totalSupply();
+            fraxValue += FRAX.balanceOf(address(_series.pool)) * share / 1e18;
+            uint256 fyFrax = _series.fyToken.balanceOf(address(_series.pool)) * share / 1e18;
             fyFraxValue += _series.pool.sellFYTokenPreview(fyFrax.u128());
         }
 
