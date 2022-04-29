@@ -171,9 +171,9 @@ contract YieldSpaceAMO is Owned {
         for (uint256 s; s < activeSeries; ++s) {
             bytes6 seriesId = seriesIterator[s];
             Series storage _series = series[seriesId];
-            uint256 share = 1e18 * _series.pool.balanceOf(address(this)) / _series.pool.totalSupply();
-            fraxValue += FRAX.balanceOf(address(_series.pool)) * share / 1e18;
-            uint256 fyFraxAmount = _series.fyToken.balanceOf(address(_series.pool)) * share / 1e18;
+            uint256 poolShare = 1e18 * _series.pool.balanceOf(address(this)) / _series.pool.totalSupply();
+            fraxValue += FRAX.balanceOf(address(_series.pool)) * poolShare / 1e18;
+            uint256 fyFraxAmount = _series.fyToken.balanceOf(address(_series.pool)) * poolShare / 1e18;
             fyFraxValue += _series.pool.sellFYTokenPreview(fyFraxAmount.u128());
         }
 
