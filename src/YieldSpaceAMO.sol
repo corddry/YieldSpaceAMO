@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity 0.8.13;
 
 // ====================================================================
 // |     ______                   _______                             |
@@ -18,11 +18,11 @@ pragma solidity ^0.8.0;
 // Sam Kazemian: https://github.com/samkazemian
 // Dennis: https://github.com/denett
 
-import "./Frax/IFrax.sol";
-import "./Frax/IFraxAMOMinter.sol";
+import "./interfaces/IFrax.sol";
+import "./interfaces/IFraxAMOMinter.sol";
 import "./utils/Owned.sol";
-import "./Yield/IFYToken.sol";
-import "./Yield/IPool.sol";
+import "./interfaces/Yield/IFYToken.sol";
+import "./interfaces/Yield/IPool.sol";
 
 library DataTypes {
     struct Vault {
@@ -42,27 +42,46 @@ library DataTypes {
 }
 
 library SafeCast {
-    function u128(uint256 amount) internal pure returns(uint128){
-        require (amount < type(uint128).max, "casting unsafe");
+    function u128(uint256 amount) internal pure returns (uint128) {
+        require(amount < type(uint128).max, "casting unsafe");
         return uint128(amount);
     }
 
-    function i128(uint256 amount) internal pure returns(int128){
-        require (amount < uint128(type(int128).max), "casting unsafe");
+    function i128(uint256 amount) internal pure returns (int128) {
+        require(amount < uint128(type(int128).max), "casting unsafe");
         return int128(uint128(amount));
     }
 }
 
 interface ILadle {
-    function pour(bytes12 vaultId, address to, int128 ink, int128 art) external payable;
-    function build(bytes6 seriesId, bytes6 ilkId, uint8 salt) external returns (bytes12 vaultId, DataTypes.Vault memory vault);
+    function pour(
+        bytes12 vaultId,
+        address to,
+        int128 ink,
+        int128 art
+    ) external payable;
+
+    function build(
+        bytes6 seriesId,
+        bytes6 ilkId,
+        uint8 salt
+    ) external returns (bytes12 vaultId, DataTypes.Vault memory vault);
+
     function cauldron() external view returns (ICauldron);
+
     function pools(bytes6 seriesId) external view returns (IPool);
 }
 
 interface ICauldron {
-    function series(bytes6 seriesId) external view returns (DataTypes.Series memory);
-    function balances(bytes12 vault) external view returns (DataTypes.Balances memory);
+    function series(bytes6 seriesId)
+        external
+        view
+        returns (DataTypes.Series memory);
+
+    function balances(bytes12 vault)
+        external
+        view
+        returns (DataTypes.Balances memory);
 }
 
 contract YieldSpaceAMO is Owned {
@@ -81,12 +100,12 @@ contract YieldSpaceAMO is Owned {
     }
 
     /* =========== STATE VARIABLES =========== */
-    
+
     // Frax
     IFrax private immutable FRAX;
-    IFraxAMOMinter private amo_minter;
-    address public timelock_address;
-    address public custodian_address;
+    IFraxAMOMinter private amoMinter;
+    address public timelockAddress;
+    address public custodianAddress;
 
     // Yield Protocol
     ILadle public immutable ladle;
@@ -100,19 +119,19 @@ contract YieldSpaceAMO is Owned {
     uint256 public currentAMOmintedFyFRAX;
 
     /* ============= CONSTRUCTOR ============= */
-    constructor (
-        address _owner_address,
-        address _amo_minter_address,
-        address _yield_ladle,
-        address _yield_frax_join
-    ) Owned(_owner_address) {
+    constructor(
+        address _ownerAddress,
+        address _amoMinterAddress,
+        address _yieldLadle,
+        address _yieldFraxJoin
+    ) Owned(_ownerAddress) {
         FRAX = IFrax(0x853d955aCEf822Db058eb8505911ED77F175b99e);
-        amo_minter = IFraxAMOMinter(_amo_minter_address);
-        timelock_address = amo_minter.timelock_address();
+        amoMinter = IFraxAMOMinter(_amoMinterAddress);
+        timelockAddress = amoMinter.timelock_address();
 
-        ladle = ILadle (_yield_ladle);
+        ladle = ILadle(_yieldLadle);
         cauldron = ICauldron(ladle.cauldron());
-        fraxJoin = _yield_frax_join;
+        fraxJoin = _yieldFraxJoin;
 
         currentAMOmintedFRAX = 0;
         currentAMOmintedFyFRAX = 0;
@@ -120,12 +139,15 @@ contract YieldSpaceAMO is Owned {
 
     /* ============== MODIFIERS ============== */
     modifier onlyByOwnGov() {
-        require (msg.sender == timelock_address || msg.sender == owner, "Not owner or timelock");
+        require(
+            msg.sender == timelockAddress || msg.sender == owner,
+            "Not owner or timelock"
+        );
         _;
     }
 
     modifier onlyByMinter() {
-        require (msg.sender == address(amo_minter), "Not minter");
+        require(msg.sender == address(amoMinter), "Not minter");
         _;
     }
 
@@ -135,34 +157,46 @@ contract YieldSpaceAMO is Owned {
     //     return (circulatingAMOMintedFyFrax() - currentRaisedFrax()) / (currentRaisedFrax() * /*timeremaining*/; //TODO pos/neg
     // }
 
-    function showAllocations(bytes6 seriesId) public view returns (uint256[6] memory return_arr) {
+    function showAllocations(bytes6 seriesId)
+        public
+        view
+        returns (uint256[6] memory return_arr)
+    {
         Series storage _series = series[seriesId];
-        require (_series.vaultId != bytes12(0), "Series not found");
+        require(_series.vaultId != bytes12(0), "Series not found");
 
-        uint256 frax_in_contract = FRAX.balanceOf(address(this));
-        uint256 frax_as_collateral = cauldron.balances(_series.vaultId).ink;
-        uint256 frax_in_LP = FRAX.balanceOf(address(_series.pool)) * _series.pool.balanceOf(address(this)) / _series.pool.totalSupply();
-        uint256 fyFrax_in_contract = _series.fyToken.balanceOf(address(this));
-        uint256 fyFrax_in_LP = _series.fyToken.balanceOf(address(_series.pool)) * _series.pool.balanceOf(address(this)) / _series.pool.totalSupply();
-        uint256 LP_owned = _series.pool.balanceOf(address(this));
+        uint256 fraxInContract = FRAX.balanceOf(address(this));
+        uint256 fraxAsCollateral = cauldron.balances(_series.vaultId).ink;
+        uint256 fraxInLP = (FRAX.balanceOf(address(_series.pool)) *
+            _series.pool.balanceOf(address(this))) / _series.pool.totalSupply();
+        uint256 fyFraxInContract = _series.fyToken.balanceOf(address(this));
+        uint256 fyFraxInLP = (_series.fyToken.balanceOf(address(_series.pool)) *
+            _series.pool.balanceOf(address(this))) / _series.pool.totalSupply();
+        uint256 LPOwned = _series.pool.balanceOf(address(this));
         return [
-            frax_in_contract,       // [0] Unallocated Frax
-            frax_as_collateral,     // [1] Frax being used as collateral to borrow fyFrax                     
-            frax_in_LP,             // [2] The Frax our LP tokens can lay claim to
-            fyFrax_in_contract,     // [3] fyFrax sitting in AMO, should be 0
-            fyFrax_in_LP,           // [4] fyFrax our LP can claim
-            LP_owned                // [5] number of LP tokens
+            fraxInContract, // [0] Unallocated Frax
+            fraxAsCollateral, // [1] Frax being used as collateral to borrow fyFrax
+            fraxInLP, // [2] The Frax our LP tokens can lay claim to
+            fyFraxInContract, // [3] fyFrax sitting in AMO, should be 0
+            fyFraxInLP, // [4] fyFrax our LP can claim
+            LPOwned // [5] number of LP tokens
         ];
     }
 
     /// @notice Return the Frax value of a fyFrax amount, considering a debt repayment if possible.
-    function fraxValue(bytes6 seriesId, uint256 fyFraxAmount) public view returns (uint256 fraxAmount) {
+    function fraxValue(bytes6 seriesId, uint256 fyFraxAmount)
+        public
+        view
+        returns (uint256 fraxAmount)
+    {
         Series storage _series = series[seriesId];
         uint256 debt = cauldron.balances(series[seriesId].vaultId).art;
         if (debt > fyFraxAmount) {
             fraxAmount = fyFraxAmount;
         } else {
-            fraxAmount = debt + _series.pool.sellFYTokenPreview((fyFraxAmount - debt).u128());
+            fraxAmount =
+                debt +
+                _series.pool.sellFYTokenPreview((fyFraxAmount - debt).u128());
         }
     }
 
@@ -177,36 +211,54 @@ contract YieldSpaceAMO is Owned {
         for (uint256 s; s < activeSeries; ++s) {
             bytes6 seriesId = seriesIterator[s];
             Series storage _series = series[seriesId];
-            uint256 poolShare = 1e18 * _series.pool.balanceOf(address(this)) / _series.pool.totalSupply();
-            
+            uint256 poolShare = (1e18 * _series.pool.balanceOf(address(this))) /
+                _series.pool.totalSupply();
+
             // Add value from Frax in LP positions
-            fraxAmount += FRAX.balanceOf(address(_series.pool)) * poolShare / 1e18;
-            
+            fraxAmount +=
+                (FRAX.balanceOf(address(_series.pool)) * poolShare) /
+                1e18;
+
             // Add value from fyFrax in the AMO and LP positions
             uint256 fyFraxAmount = _series.fyToken.balanceOf(address(this));
-            fyFraxAmount += _series.fyToken.balanceOf(address(_series.pool)) * poolShare / 1e18;
+            fyFraxAmount +=
+                (_series.fyToken.balanceOf(address(_series.pool)) * poolShare) /
+                1e18;
             fraxAmount += fraxValue(seriesId, fyFraxAmount);
         }
     }
 
     /// @notice returns the collateral balance of the AMO for calculating FRAX’s global collateral ratio
-    function dollarBalances() public view returns (uint256 valueAsFrax, uint256 valueAsCollateral) {
+    function dollarBalances()
+        public
+        view
+        returns (uint256 valueAsFrax, uint256 valueAsCollateral)
+    {
         valueAsFrax = currentFrax();
-        valueAsCollateral = valueAsFrax * FRAX.global_collateral_ratio() / 1e6; // This assumes that FRAX.global_collateral_ratio() has 6 decimals
+        valueAsCollateral =
+            (valueAsFrax * FRAX.global_collateral_ratio()) /
+            1e6; // This assumes that FRAX.global_collateral_ratio() has 6 decimals
     }
-    
+
     /* ========= RESTRICTED FUNCTIONS ======== */
     /// @notice register a new series in the AMO
     /// @param seriesId the series being added
-    function addSeries(bytes6 seriesId, IFYToken fyToken, IPool pool) public onlyByOwnGov {
-        require (ladle.pools(seriesId) == pool, "Mismatched pool");
-        require (cauldron.series(seriesId).fyToken == fyToken, "Mismatched fyToken");
+    function addSeries(
+        bytes6 seriesId,
+        IFYToken fyToken,
+        IPool pool
+    ) public onlyByOwnGov {
+        require(ladle.pools(seriesId) == pool, "Mismatched pool");
+        require(
+            cauldron.series(seriesId).fyToken == fyToken,
+            "Mismatched fyToken"
+        );
 
-        (bytes12 vaultId,) = ladle.build(seriesId, FRAX_ILK_ID, 0);
+        (bytes12 vaultId, ) = ladle.build(seriesId, FRAX_ILK_ID, 0);
         series[seriesId] = Series({
-            vaultId : vaultId,
-            fyToken : fyToken,
-            pool : pool,
+            vaultId: vaultId,
+            fyToken: fyToken,
+            pool: pool,
             maturity: uint96(fyToken.maturity()) // Will work for a while.
         });
 
@@ -216,12 +268,21 @@ contract YieldSpaceAMO is Owned {
     /// @notice remove a new series in the AMO, to keep gas costs in place
     /// @param seriesId the series being removed
     /// @param seriesIndex the index in the seriesIterator for the series being removed
-    function removeSeries(bytes6 seriesId, uint256 seriesIndex) public onlyByOwnGov {
-        require (seriesId == seriesIterator[seriesIndex], "Index mismatch");
+    function removeSeries(bytes6 seriesId, uint256 seriesIndex)
+        public
+        onlyByOwnGov
+    {
+        require(seriesId == seriesIterator[seriesIndex], "Index mismatch");
         Series storage _series = series[seriesId];
-        require (_series.vaultId != bytes12(0), "Series not found");
-        require (_series.fyToken.balanceOf(address(this)) == 0, "Outstanding fyToken balance");
-        require (_series.pool.balanceOf(address(this)) == 0, "Outstanding pool balance");
+        require(_series.vaultId != bytes12(0), "Series not found");
+        require(
+            _series.fyToken.balanceOf(address(this)) == 0,
+            "Outstanding fyToken balance"
+        );
+        require(
+            _series.pool.balanceOf(address(this)) == 0,
+            "Outstanding pool balance"
+        );
 
         delete series[seriesId];
 
@@ -237,35 +298,30 @@ contract YieldSpaceAMO is Owned {
     /// @dev The Frax to work with needs to be in the AMO already.
     /// @param seriesId fyFrax series being minted
     /// @param fraxAmount amount of Frax being used to mint fyFrax at 1:1
-    function mintFyFrax(
-        bytes6 seriesId,
-        uint128 fraxAmount
-    )
-        public onlyByOwnGov
+    function mintFyFrax(bytes6 seriesId, uint128 fraxAmount)
+        public
+        onlyByOwnGov
     {
-        Series storage _series = series[seriesId];
-        require (_series.vaultId != bytes12(0), "Series not found");
+        Series memory _series = series[seriesId];
+        require(_series.vaultId != bytes12(0), "Series not found");
         _mintFyFrax(_series, address(this), fraxAmount);
     }
 
     /// @notice mint fyFrax using FRAX as collateral 1:1 Frax to fyFrax
     /// @dev The Frax to work with needs to be in the AMO already.
-    /// @param series fyFrax series being minted
+    /// @param _series fyFrax series being minted
     /// @param to destination for the fyFrax
     /// @param fraxAmount amount of Frax being used to mint fyFrax at 1:1
     function _mintFyFrax(
-        Series _series,
+        Series memory _series,
         address to,
         uint128 fraxAmount
-    )
-        public onlyByOwnGov
-    {
+    ) public onlyByOwnGov {
         //Transfer FRAX to the FRAX Join, add it as collateral, and borrow.
         int128 _fraxAmount = uint256(fraxAmount).i128(); // `using` doesn't work with function overloading
         FRAX.transfer(fraxJoin, fraxAmount);
         ladle.pour(_series.vaultId, to, _fraxAmount, _fraxAmount);
     }
-
 
     /// @notice recover Frax from an amount of fyFrax, repaying or redeeming.
     /// Before maturity, if there isn't enough debt to convert all the fyFrax into Frax, the surplus
@@ -275,49 +331,55 @@ contract YieldSpaceAMO is Owned {
     /// @param fyFraxAmount amount of fyFrax being burned
     /// @return fraxAmount amount of Frax recovered
     /// @return fyFraxAmount amount of fyFrax stored in the AMO
-    function burnFyFrax(
-        bytes6 seriesId,
-        uint128 fyFraxAmount
-    )
-        public onlyByOwnGov
-        returns (uint256 fraxAmount, fyFraxAmount)
-    { 
-        Series storage _series = series[seriesId];
-        require (_series.vaultId != bytes12(0), "Series not found");
+    function burnFyFrax(bytes6 seriesId, uint128 fyFraxAmount)
+        public
+        onlyByOwnGov
+        returns (uint256 fraxAmount, uint128)
+    {
+        Series memory _series = series[seriesId];
+        require(_series.vaultId != bytes12(0), "Series not found");
 
-        _burnFyFrax(_series, address(this), fyFraxAmount)
+        return _burnFyFrax(_series, address(this), fyFraxAmount);
     }
 
     /// @notice recover Frax from an amount of fyFrax, repaying or redeeming.
     /// Before maturity, if there isn't enough debt to convert all the fyFrax into Frax, the surplus
     /// will be stored in the AMO. Calling this function after maturity will redeem the surplus.
     /// @dev The fyFrax to work with needs to be in the AMO already.
-    /// @param series fyFrax series being burned
+    /// @param _series fyFrax series being burned
     /// @param to destination for the frax recovered
     /// @param fyFraxAmount amount of fyFrax being burned
     /// @return fraxAmount amount of Frax recovered
     /// @return fyFraxAmount amount of fyFrax stored in the AMO
     function _burnFyFrax(
-        Series _series,
+        Series memory _series,
         address to,
-        uint128 fyFraxAmount,
-    )
-        public onlyByOwnGov
-        returns (uint256 fraxAmount, fyFraxAmount)
-    { 
-        if (_series.maturity < block.timestamp) { // At maturity, forget about debt and redeem at 1:1
+        uint128 fyFraxAmount
+    ) internal returns (uint256 fraxAmount, uint128) {
+        if (_series.maturity < block.timestamp) {
+            // At maturity, forget about debt and redeem at 1:1
             _series.fyToken.transfer(address(_series.fyToken), fyFraxAmount);
             fraxAmount = _series.fyToken.redeem(to, fyFraxAmount);
-        } else { // Before maturity, repay as much debt as possible, and keep any surplus fyFrax
-            uint256 debt = cauldron.balances(series[seriesId].vaultId).art;
-            (fraxAmount, fyFraxAmount) = debt > fyFraxAmount ? (fyFraxAmount, 0) : (debt, fyFraxAmount - debt)); // After this, `fyFraxAmount` has the surplus.
+        } else {
+            // Before maturity, repay as much debt as possible, and keep any surplus fyFrax
+            uint256 debt = cauldron.balances(_series.vaultId).art;
+            (fraxAmount, fyFraxAmount) = debt > fyFraxAmount
+                ? (fyFraxAmount, 0)
+                : (debt, (fyFraxAmount - debt).u128()); // After this, `fyFraxAmount` has the surplus.
 
             _series.fyToken.transfer(address(_series.fyToken), fraxAmount);
-            ladle.pour(_series.vaultId, to, -(fraxAmount.i128()), -(fraxAmount.i128()));
+            ladle.pour(
+                _series.vaultId,
+                to,
+                -(fraxAmount.i128()),
+                -(fraxAmount.i128())
+            );
         }
+
+        return (fraxAmount, fyFraxAmount);
     }
 
-    /// @notice mint new fyFrax to sell into the AMM to push up rates 
+    /// @notice mint new fyFrax to sell into the AMM to push up rates
     /// @dev The Frax to work with needs to be in the AMO already.
     /// @param seriesId fyFrax series we are increasing the rates for
     /// @param fraxAmount amount of Frax being converted to fyFrax and sold
@@ -327,12 +389,9 @@ contract YieldSpaceAMO is Owned {
         bytes6 seriesId,
         uint128 fraxAmount,
         uint128 minFraxReceived
-    )
-        public onlyByOwnGov
-        returns (uint256 fraxReceived)
-    {
+    ) public onlyByOwnGov returns (uint256 fraxReceived) {
         Series storage _series = series[seriesId];
-        require (_series.vaultId != bytes12(0), "Series not found");
+        require(_series.vaultId != bytes12(0), "Series not found");
 
         //Mint fyFRAX into the pool, and sell it.
         _mintFyFrax(_series, address(_series.pool), fraxAmount);
@@ -351,17 +410,24 @@ contract YieldSpaceAMO is Owned {
         bytes6 seriesId,
         uint128 fraxAmount,
         uint128 minFyFraxReceived
-    )
-        public onlyByOwnGov
-        returns (uint256 fraxReceived, uint256 fyFraxStored)
-    {
-        Series storage _series = series[seriesId];
-        require (_series.vaultId != bytes12(0), "Series not found");
+    ) public onlyByOwnGov returns (uint256 fraxReceived, uint256 fyFraxStored) {
+        Series memory _series = series[seriesId];
+        require(_series.vaultId != bytes12(0), "Series not found");
 
         //Transfer FRAX into the pool, sell it for fyFRAX into the fyFRAX contract, repay debt and withdraw FRAX collateral.
         FRAX.transfer(address(_series.pool), fraxAmount);
-        uint256 fyFraxReceived = _series.pool.sellBase(address(_series.fyToken), minFyFraxReceived);
-        (fraxReceived, fyFraxStored) = burnFyFrax(_series, address(this), fyFraxReceived.u128());
+        uint256 fyFraxReceived = _series.pool.sellBase(
+            address(_series.fyToken),
+            minFyFraxReceived
+        );
+        uint128 fyFraxStored_;
+        (fraxReceived, fyFraxStored_) = _burnFyFrax(
+            _series,
+            address(this),
+            fyFraxReceived.u128()
+        );
+        fyFraxStored = fyFraxStored_.u128();
+
         emit RatesDecreased(fraxAmount, fraxReceived);
     }
 
@@ -380,17 +446,19 @@ contract YieldSpaceAMO is Owned {
         uint128 fyFraxAmount,
         uint256 minRatio,
         uint256 maxRatio
-    )
-        public onlyByOwnGov
-        returns (uint256 fraxUsed, uint256 poolMinted)
-    {
+    ) public onlyByOwnGov returns (uint256 fraxUsed, uint256 poolMinted) {
         Series storage _series = series[seriesId];
-        require (_series.vaultId != bytes12(0), "Series not found");
+        require(_series.vaultId != bytes12(0), "Series not found");
 
         //Transfer FRAX into the pool. Transfer FRAX into the FRAX Join. Borrow fyFRAX into the pool. Add liquidity.
-        _mintFyFrax(seriesId, address(_series.pool), fyFraxAmount);
+        _mintFyFrax(_series, address(_series.pool), fyFraxAmount);
         FRAX.transfer(address(_series.pool), fraxAmount);
-        (fraxUsed,, poolMinted) = _series.pool.mint(address(this), address(this), minRatio, maxRatio); //Second param receives remainder
+        (fraxUsed, , poolMinted) = _series.pool.mint(
+            address(this),
+            address(this),
+            minRatio,
+            maxRatio
+        ); //Second param receives remainder
         emit LiquidityAdded(fraxUsed, poolMinted);
     }
 
@@ -409,26 +477,35 @@ contract YieldSpaceAMO is Owned {
         uint256 maxRatio
     ) public onlyByOwnGov returns (uint256 fraxReceived, uint256 fyFraxStored) {
         Series storage _series = series[seriesId];
-        require (_series.vaultId != bytes12(0), "Series not found");
+        require(_series.vaultId != bytes12(0), "Series not found");
 
         //Transfer pool tokens into the pool. Burn pool tokens, with the fyFRAX going into the fyFRAX contract.
         //Instruct the Ladle to repay as much debt as fyFRAX from the burn, and withdraw the same amount of collateral.
         _series.pool.transfer(address(_series.pool), poolAmount);
-        (,, uint256 fyFraxAmount) = _series.pool.burn(address(this), address(_series.fyToken), minRatio, maxRatio);
-        (fraxReceived, fyFraxStored) = _burnFyFrax(_series, address(this), fyFraxAmount.u128());
+        (, , uint256 fyFraxAmount) = _series.pool.burn(
+            address(this),
+            address(_series.fyToken),
+            minRatio,
+            maxRatio
+        );
+        (fraxReceived, fyFraxStored) = _burnFyFrax(
+            _series,
+            address(this),
+            fyFraxAmount.u128()
+        );
         emit LiquidityRemoved(fraxReceived, poolAmount);
     }
 
     /* === RESTRICTED GOVERNANCE FUNCTIONS === */
-    function setAMOMinter(IFraxAMOMinter _amo_minter) external onlyByOwnGov {
-        amo_minter = _amo_minter;
+    function setAMOMinter(IFraxAMOMinter _amoMinter) external onlyByOwnGov {
+        amoMinter = _amoMinter;
 
         // Get the timelock addresses from the minter
-        timelock_address = _amo_minter.timelock_address();
+        timelockAddress = _amoMinter.timelock_address();
 
         // Make sure the new addresses are not address(0)
-        require (timelock_address != address(0), "Invalid timelock");
-        emit AMOMinterSet(address(_amo_minter));
+        require(timelockAddress != address(0), "Invalid timelock");
+        emit AMOMinterSet(address(_amoMinter));
     }
 
     /// @notice generic proxy
@@ -437,16 +514,15 @@ contract YieldSpaceAMO is Owned {
         uint256 value,
         bytes calldata data
     ) external onlyByOwnGov returns (bool, bytes memory) {
-        (bool success, bytes memory result) = to.call{value:value}(data);
+        (bool success, bytes memory result) = to.call{value: value}(data);
         return (success, result);
     }
 
     /* ================ EVENTS =============== */
     //TODO What other events do we want?
-    event LiquidityAdded(uint fraxUsed, uint poolMinted);
-    event LiquidityRemoved(uint fraxReceived, uint poolBurned);
-    event RatesIncreased(uint fraxUsed, uint fraxReceived);
-    event RatesDecreased(uint fraxUsed, uint fraxReceived);
-    event AMOMinterSet(address amo_minter_address);
-
+    event LiquidityAdded(uint256 fraxUsed, uint256 poolMinted);
+    event LiquidityRemoved(uint256 fraxReceived, uint256 poolBurned);
+    event RatesIncreased(uint256 fraxUsed, uint256 fraxReceived);
+    event RatesDecreased(uint256 fraxUsed, uint256 fraxReceived);
+    event AMOMinterSet(address amoMinterAddress);
 }

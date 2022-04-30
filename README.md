@@ -1,15 +1,27 @@
-# Basic Sample Hardhat Project
+# YieldSpaceAMO
 
-This project demonstrates a basic Hardhat use case. It comes with a sample contract, a test for that contract, a sample script that deploys that contract, and an example of a task implementation, which simply lists the available accounts.
+### Pre-install
 
-Try running some of the following tasks:
+ - Install [foundry](https://book.getfoundry.sh/getting-started/installation.html)
 
+ - git clone this repo and cd in to the directory
+
+
+### Install
 ```shell
-npx hardhat accounts
-npx hardhat compile
-npx hardhat clean
-npx hardhat test
-npx hardhat node
-node scripts/sample-script.js
-npx hardhat help
+forge install
+```
+
+### Commands
+```shell
+forge update # update deps
+```
+```shell
+forge clean  # clean cache
+```
+```shell
+forge build  # build
+```
+```shell
+forge test   # run tests
 ```

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity 0.8.6;
+pragma solidity 0.8.13;
 import "@yield-protocol/utils-v2/contracts/token/IERC20.sol";
 import "@yield-protocol/vault-interfaces/src/IFYToken.sol";
 import "@yield-protocol/vault-interfaces/src/DataTypes.sol";
@@ -35,8 +35,11 @@ contract VaultMock is ICauldron, ILadle {
 
     mapping (bytes6 => DataTypes.Series) public series;
     mapping (bytes12 => DataTypes.Vault) public vaults;
-    mapping (bytes12 => DataTypes.Balances) public override balances;
+    mapping (bytes12 => DataTypes.Balances) internal _balances;
 
+    function balances(bytes12 vault) external view returns (DataTypes.Balances memory) {
+        return _balances[vault];
+    }
     uint96 public lastVaultId;
     uint48 public nextSeriesId;
 
@@ -68,11 +71,11 @@ contract VaultMock is ICauldron, ILadle {
         return (bytes12(lastVaultId - 1), vaults[bytes12(lastVaultId - 1)]);
     }
 
-    function pour(bytes12 vaultId, address to, int128 ink, int128 art) external override {
+    function pour(bytes12 vaultId, address to, int128 ink, int128 art) external payable override {
         if (ink > 0) base.burn(address(this), uint128(ink)); // Simulate taking the base, which is also the collateral
         if (ink < 0) base.mint(to, uint128(-ink));
-        balances[vaultId].ink = balances[vaultId].ink.add(ink);
-        balances[vaultId].art = balances[vaultId].art.add(art);
+        _balances[vaultId].ink = _balances[vaultId].ink.add(ink);
+        _balances[vaultId].art = _balances[vaultId].art.add(art);
         address fyToken = address(series[vaults[vaultId].seriesId].fyToken);
         if (art > 0) FYTokenMock(fyToken).mint(to, uint128(art));
         if (art < 0) FYTokenMock(fyToken).burn(fyToken, uint128(-art));
