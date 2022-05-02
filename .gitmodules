@@ -13,3 +13,7 @@
 	path = lib/yieldspace-interfaces
 	url = https://github.com/yieldprotocol/yieldspace-interfaces.git
 	branch = main
+[submodule "lib/yieldspace-v2"]
+	path = lib/yieldspace-v2
+	url = https://github.com/yieldprotocol/yieldspace-v2.git
+	branch = solc-0.8.13
