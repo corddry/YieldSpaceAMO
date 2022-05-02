@@ -134,9 +134,11 @@ contract YieldSpaceAMO is Owned {
     ) public view returns (uint256 fraxAmount) {
         Series storage _series = series[seriesId];
         uint256 debt = cauldron.balances(series[seriesId].vaultId).art;
+        // TODO: Consider maturity
         if (debt > fyFraxAmount) {
             fraxAmount = fyFraxAmount;
         } else {
+            // TODO: Consider an out if the pool doesn't have enough liquidity. Try-catch and return zero.
             fraxAmount =
                 debt +
                 _series.pool.sellFYTokenPreview((fyFraxAmount - debt).u128());
@@ -255,7 +257,7 @@ contract YieldSpaceAMO is Owned {
         Series memory _series,
         address to,
         uint128 fraxAmount
-    ) public {
+    ) internal {
         //Transfer FRAX to the FRAX Join, add it as collateral, and borrow.
         int128 _fraxAmount = fraxAmount.i128();
         FRAX.transfer(fraxJoin, fraxAmount);
@@ -273,11 +275,11 @@ contract YieldSpaceAMO is Owned {
     function burnFyFrax(
         bytes6 seriesId,
         uint128 fyFraxAmount
-    ) public onlyByOwnGov returns (uint256 fraxAmount, uint128) {
+    ) public onlyByOwnGov returns (uint256 fraxAmount, uint128 fyFraxStored) {
         Series memory _series = series[seriesId];
         require(_series.vaultId != bytes12(0), "Series not found");
 
-        return _burnFyFrax(_series, address(this), fyFraxAmount);
+        (fraxAmount, fyFraxStored) = _burnFyFrax(_series, address(this), fyFraxAmount);
     }
 
     /// @notice recover Frax from an amount of fyFrax, repaying or redeeming.
@@ -305,7 +307,7 @@ contract YieldSpaceAMO is Owned {
                 ? (fyFraxAmount, 0)
                 : (debt, (fyFraxAmount - debt).u128());
 
-            _series.fyToken.transfer(address(_series.fyToken), fraxAmount);
+            _series.fyToken.transfer(address(_series.fyToken), fraxAmount); // TODO: Do we need the transfer?
             ladle.pour(
                 _series.vaultId,
                 to,
@@ -313,8 +315,6 @@ contract YieldSpaceAMO is Owned {
                 -(fraxAmount.u128().i128())
             );
         }
-
-        return (fraxAmount, fyFraxStored);
     }
 
     /// @notice mint new fyFrax to sell into the AMM to push up rates
@@ -331,7 +331,8 @@ contract YieldSpaceAMO is Owned {
         Series storage _series = series[seriesId];
         require(_series.vaultId != bytes12(0), "Series not found");
 
-        //Mint fyFRAX into the pool, and sell it.
+        // Mint fyFRAX into the pool, and sell it.
+        // TODO: Should it sell any surplus fyFrax held by the AMO first?
         _mintFyFrax(_series, address(_series.pool), fraxAmount);
         fraxReceived = _series.pool.sellFYToken(address(this), minFraxReceived);
         emit RatesIncreased(fraxAmount, fraxReceived);
@@ -355,7 +356,7 @@ contract YieldSpaceAMO is Owned {
         //Transfer FRAX into the pool, sell it for fyFRAX into the fyFRAX contract, repay debt and withdraw FRAX collateral.
         FRAX.transfer(address(_series.pool), fraxAmount);
         uint256 fyFraxReceived = _series.pool.sellBase(
-            address(_series.fyToken),
+            address(_series.fyToken), // TODO: Keep fyFRAX in the AMO instead.
             minFyFraxReceived
         );
 
@@ -388,6 +389,7 @@ contract YieldSpaceAMO is Owned {
         require(_series.vaultId != bytes12(0), "Series not found");
 
         //Transfer FRAX into the pool. Transfer FRAX into the FRAX Join. Borrow fyFRAX into the pool. Add liquidity.
+        // TODO: Should it use any surplus fyFrax held by the AMO first?
         _mintFyFrax(_series, address(_series.pool), fyFraxAmount);
         FRAX.transfer(address(_series.pool), fraxAmount);
         (fraxUsed, , poolMinted) = _series.pool.mint(
