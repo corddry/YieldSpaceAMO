@@ -5,10 +5,6 @@
 	path = lib/yield-utils-v2
 	url = https://github.com/yieldprotocol/yield-utils-v2
 	branch = main
-[submodule "lib/vault-interfaces"]
-	path = lib/vault-interfaces
-	url = https://github.com/yieldprotocol/vault-interfaces
-	branch = main
 [submodule "lib/yieldspace-interfaces"]
 	path = lib/yieldspace-interfaces
 	url = https://github.com/yieldprotocol/yieldspace-interfaces.git
@@ -17,3 +13,6 @@
 	path = lib/yieldspace-v2
 	url = https://github.com/yieldprotocol/yieldspace-v2.git
 	branch = solc-0.8.13
+[submodule "lib/vault-interfaces"]
+	path = lib/vault-interfaces
+	url = https://github.com/yieldprotocol/vault-interfaces
