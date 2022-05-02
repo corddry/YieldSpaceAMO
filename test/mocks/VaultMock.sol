@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity 0.8.13;
-import "@yield-protocol/utils-v2/contracts/token/IERC20.sol";
-import "@yield-protocol/vault-interfaces/src/IFYToken.sol";
-import "@yield-protocol/vault-interfaces/src/DataTypes.sol";
+import "../../lib/yield-utils-v2/contracts/token/IERC20.sol";
+import "../../lib/vault-interfaces/src/IFYToken.sol";
+import "../../lib/vault-interfaces/src/DataTypes.sol";
+import "../../lib/yieldspace-interfaces/IPool.sol";
 import "./BaseMock.sol";
 import "./FYTokenMock.sol";
 

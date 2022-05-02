@@ -18,75 +18,21 @@ pragma solidity 0.8.13;
 // Sam Kazemian: https://github.com/samkazemian
 // Dennis: https://github.com/denett
 
+import "../lib/yield-utils-v2/contracts/cast/CastU256U128.sol";
+import "../lib/yield-utils-v2/contracts/cast/CastU128I128.sol";
+import "../lib/vault-interfaces/src/ICauldron.sol";
+import "../lib/vault-interfaces/src/ILadle.sol";
+import "../lib/vault-interfaces/src/IFYToken.sol";
+import "../lib/vault-interfaces/src/DataTypes.sol";
+import "../lib/yieldspace-interfaces/IPool.sol";
 import "./interfaces/IFrax.sol";
 import "./interfaces/IFraxAMOMinter.sol";
 import "./utils/Owned.sol";
-import "./interfaces/Yield/IFYToken.sol";
-import "./interfaces/Yield/IPool.sol";
 
-library DataTypes {
-    struct Vault {
-        address owner;
-        bytes6 seriesId; // Each vault is related to only one series, which also determines the underlying.
-        bytes6 ilkId; // Asset accepted as collateral
-    }
-    struct Balances {
-        uint128 art; // Debt amount
-        uint128 ink; // Collateral amount
-    }
-    struct Series {
-        IFYToken fyToken; // Redeemable token for the series.
-        bytes6 baseId; // Asset received on redemption.
-        uint32 maturity; // Unix time at which redemption becomes possible.
-    }
-}
-
-library SafeCast {
-    function u128(uint256 amount) internal pure returns (uint128) {
-        require(amount < type(uint128).max, "casting unsafe");
-        return uint128(amount);
-    }
-
-    function i128(uint256 amount) internal pure returns (int128) {
-        require(amount < uint128(type(int128).max), "casting unsafe");
-        return int128(uint128(amount));
-    }
-}
-
-interface ILadle {
-    function pour(
-        bytes12 vaultId,
-        address to,
-        int128 ink,
-        int128 art
-    ) external payable;
-
-    function build(
-        bytes6 seriesId,
-        bytes6 ilkId,
-        uint8 salt
-    ) external returns (bytes12 vaultId, DataTypes.Vault memory vault);
-
-    function cauldron() external view returns (ICauldron);
-
-    function pools(bytes6 seriesId) external view returns (IPool);
-}
-
-interface ICauldron {
-    function series(bytes6 seriesId)
-        external
-        view
-        returns (DataTypes.Series memory);
-
-    function balances(bytes12 vault)
-        external
-        view
-        returns (DataTypes.Balances memory);
-}
 
 contract YieldSpaceAMO is Owned {
-    using SafeCast for uint256;
-    using SafeCast for uint128;
+    using CastU256U128 for uint256;
+    using CastU128I128 for uint128;
 
     /* =========== CONSTANTS =========== */
     bytes6 public constant FRAX_ILK_ID = 0x313800000000;
@@ -241,7 +187,7 @@ contract YieldSpaceAMO is Owned {
         IFYToken fyToken,
         IPool pool
     ) public onlyByOwnGov {
-        require(ladle.pools(seriesId) == pool, "Mismatched pool");
+        require(ladle.pools(seriesId) == address(pool), "Mismatched pool");
         require(
             cauldron.series(seriesId).fyToken == fyToken,
             "Mismatched fyToken"
@@ -311,7 +257,7 @@ contract YieldSpaceAMO is Owned {
         uint128 fraxAmount
     ) public {
         //Transfer FRAX to the FRAX Join, add it as collateral, and borrow.
-        int128 _fraxAmount = uint256(fraxAmount).i128(); // `using` doesn't work with function overloading
+        int128 _fraxAmount = fraxAmount.i128();
         FRAX.transfer(fraxJoin, fraxAmount);
         ladle.pour(_series.vaultId, to, _fraxAmount, _fraxAmount);
     }
@@ -342,12 +288,12 @@ contract YieldSpaceAMO is Owned {
     /// @param to destination for the frax recovered
     /// @param fyFraxAmount amount of fyFrax being burned
     /// @return fraxAmount amount of Frax recovered
-    /// @return fyFraxAmount amount of fyFrax stored in the AMO
+    /// @return fyFraxStored amount of fyFrax stored in the AMO
     function _burnFyFrax(
         Series memory _series,
         address to,
         uint128 fyFraxAmount
-    ) internal returns (uint256 fraxAmount, uint128) {
+    ) internal returns (uint256 fraxAmount, uint128 fyFraxStored) {
         if (_series.maturity < block.timestamp) {
             // At maturity, forget about debt and redeem at 1:1
             _series.fyToken.transfer(address(_series.fyToken), fyFraxAmount);
@@ -355,20 +301,20 @@ contract YieldSpaceAMO is Owned {
         } else {
             // Before maturity, repay as much debt as possible, and keep any surplus fyFrax
             uint256 debt = cauldron.balances(_series.vaultId).art;
-            (fraxAmount, fyFraxAmount) = debt > fyFraxAmount
+            (fraxAmount, fyFraxStored) = debt > fyFraxAmount
                 ? (fyFraxAmount, 0)
-                : (debt, (fyFraxAmount - debt).u128()); // After this, `fyFraxAmount` has the surplus.
+                : (debt, (fyFraxAmount - debt).u128());
 
             _series.fyToken.transfer(address(_series.fyToken), fraxAmount);
             ladle.pour(
                 _series.vaultId,
                 to,
-                -(fraxAmount.i128()),
-                -(fraxAmount.i128())
+                -(fraxAmount.u128().i128()),
+                -(fraxAmount.u128().i128())
             );
         }
 
-        return (fraxAmount, fyFraxAmount);
+        return (fraxAmount, fyFraxStored);
     }
 
     /// @notice mint new fyFrax to sell into the AMM to push up rates
@@ -412,13 +358,12 @@ contract YieldSpaceAMO is Owned {
             address(_series.fyToken),
             minFyFraxReceived
         );
-        uint128 fyFraxStored_;
-        (fraxReceived, fyFraxStored_) = _burnFyFrax(
+
+        (fraxReceived, fyFraxStored) = _burnFyFrax(
             _series,
             address(this),
             fyFraxReceived.u128()
         );
-        fyFraxStored = fyFraxStored_.u128();
 
         emit RatesDecreased(fraxAmount, fraxReceived);
     }
