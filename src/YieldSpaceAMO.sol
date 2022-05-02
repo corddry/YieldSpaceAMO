@@ -157,11 +157,9 @@ contract YieldSpaceAMO is Owned {
     //     return (circulatingAMOMintedFyFrax() - currentRaisedFrax()) / (currentRaisedFrax() * /*timeremaining*/; //TODO pos/neg
     // }
 
-    function showAllocations(bytes6 seriesId)
-        public
-        view
-        returns (uint256[6] memory return_arr)
-    {
+    function showAllocations(
+        bytes6 seriesId
+    ) public view returns (uint256[6] memory return_arr) {
         Series storage _series = series[seriesId];
         require(_series.vaultId != bytes12(0), "Series not found");
 
@@ -184,11 +182,10 @@ contract YieldSpaceAMO is Owned {
     }
 
     /// @notice Return the Frax value of a fyFrax amount, considering a debt repayment if possible.
-    function fraxValue(bytes6 seriesId, uint256 fyFraxAmount)
-        public
-        view
-        returns (uint256 fraxAmount)
-    {
+    function fraxValue(
+        bytes6 seriesId,
+        uint256 fyFraxAmount
+    ) public view returns (uint256 fraxAmount) {
         Series storage _series = series[seriesId];
         uint256 debt = cauldron.balances(series[seriesId].vaultId).art;
         if (debt > fyFraxAmount) {
@@ -229,11 +226,7 @@ contract YieldSpaceAMO is Owned {
     }
 
     /// @notice returns the collateral balance of the AMO for calculating FRAX’s global collateral ratio
-    function dollarBalances()
-        public
-        view
-        returns (uint256 valueAsFrax, uint256 valueAsCollateral)
-    {
+    function dollarBalances() public view returns (uint256 valueAsFrax, uint256 valueAsCollateral) {
         valueAsFrax = currentFrax();
         valueAsCollateral =
             (valueAsFrax * FRAX.global_collateral_ratio()) /
@@ -268,10 +261,10 @@ contract YieldSpaceAMO is Owned {
     /// @notice remove a new series in the AMO, to keep gas costs in place
     /// @param seriesId the series being removed
     /// @param seriesIndex the index in the seriesIterator for the series being removed
-    function removeSeries(bytes6 seriesId, uint256 seriesIndex)
-        public
-        onlyByOwnGov
-    {
+    function removeSeries(
+        bytes6 seriesId,
+        uint256 seriesIndex
+    ) public onlyByOwnGov {
         require(seriesId == seriesIterator[seriesIndex], "Index mismatch");
         Series storage _series = series[seriesId];
         require(_series.vaultId != bytes12(0), "Series not found");
@@ -298,10 +291,10 @@ contract YieldSpaceAMO is Owned {
     /// @dev The Frax to work with needs to be in the AMO already.
     /// @param seriesId fyFrax series being minted
     /// @param fraxAmount amount of Frax being used to mint fyFrax at 1:1
-    function mintFyFrax(bytes6 seriesId, uint128 fraxAmount)
-        public
-        onlyByOwnGov
-    {
+    function mintFyFrax(
+        bytes6 seriesId,
+        uint128 fraxAmount
+    ) public onlyByOwnGov {
         Series memory _series = series[seriesId];
         require(_series.vaultId != bytes12(0), "Series not found");
         _mintFyFrax(_series, address(this), fraxAmount);
@@ -316,7 +309,7 @@ contract YieldSpaceAMO is Owned {
         Series memory _series,
         address to,
         uint128 fraxAmount
-    ) public onlyByOwnGov {
+    ) public {
         //Transfer FRAX to the FRAX Join, add it as collateral, and borrow.
         int128 _fraxAmount = uint256(fraxAmount).i128(); // `using` doesn't work with function overloading
         FRAX.transfer(fraxJoin, fraxAmount);
@@ -331,11 +324,10 @@ contract YieldSpaceAMO is Owned {
     /// @param fyFraxAmount amount of fyFrax being burned
     /// @return fraxAmount amount of Frax recovered
     /// @return fyFraxAmount amount of fyFrax stored in the AMO
-    function burnFyFrax(bytes6 seriesId, uint128 fyFraxAmount)
-        public
-        onlyByOwnGov
-        returns (uint256 fraxAmount, uint128)
-    {
+    function burnFyFrax(
+        bytes6 seriesId,
+        uint128 fyFraxAmount
+    ) public onlyByOwnGov returns (uint256 fraxAmount, uint128) {
         Series memory _series = series[seriesId];
         require(_series.vaultId != bytes12(0), "Series not found");
 
