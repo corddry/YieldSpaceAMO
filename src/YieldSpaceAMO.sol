@@ -18,16 +18,16 @@ pragma solidity 0.8.13;
 // Sam Kazemian: https://github.com/samkazemian
 // Dennis: https://github.com/denett
 
-import "../lib/yield-utils-v2/contracts/cast/CastU256U128.sol";
-import "../lib/yield-utils-v2/contracts/cast/CastU128I128.sol";
-import "../lib/vault-interfaces/src/ICauldron.sol";
-import "../lib/vault-interfaces/src/ILadle.sol";
-import "../lib/vault-interfaces/src/IFYToken.sol";
-import "../lib/vault-interfaces/src/DataTypes.sol";
-import "../lib/yieldspace-interfaces/IPool.sol";
-import "./interfaces/IFrax.sol";
-import "./interfaces/IFraxAMOMinter.sol";
-import "./utils/Owned.sol";
+import {CastU256U128} from "yield-utils-v2/contracts/cast/CastU256U128.sol";
+import {CastU128I128} from "yield-utils-v2/contracts/cast/CastU128I128.sol";
+import {ICauldron} from  "vault-interfaces/ICauldron.sol";
+import {ILadle} from "vault-interfaces/ILadle.sol";
+import {IFYToken} from "vault-interfaces/IFYToken.sol";
+// import "vault-interfaces/DataTypes.sol";
+import {IPool} from "yieldspace-interfaces/IPool.sol";
+import {IFrax} from "./interfaces/IFrax.sol";
+import {IFraxAMOMinter} from "./interfaces/IFraxAMOMinter.sol";
+import {Owned} from "./utils/Owned.sol";
 
 
 contract YieldSpaceAMO is Owned {
