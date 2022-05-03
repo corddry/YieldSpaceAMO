@@ -46,4 +46,34 @@ contract YieldSpaceAMOTest is Test {
     function testExample() public {
         assertTrue(true);
     }
+
+    // Zero State
+    // addSeries -> WithSeries
+    //   currentFrax
+    //   dollarBalance
+    //   mintFYFrax -> WithFYFraxInAMO
+    //     currentFrax
+    //     mintFYFrax
+    //     burnFYFrax
+    //     warp(maturity) -> WithFYFraxInAMOMature
+    //       currentFrax
+    //       burnFYFrax
+    //   addLiquidity -> WithLiquidityInYieldSpace
+    //     currentFrax
+    //     increaseRates
+    //     decreaseRates
+    //     removeLiquidity
+    //     warp(maturity) -> WithLiquidityInYieldSpaceAMOMature
+    //       currentFrax
+    //       removeLiquidity
+    // addSeries -> WithTwoSeries
+    //   currentFrax
+    //   mintFYFrax -> WithTwoFYFraxInAMO
+    //     currentFrax
+    //     warp(maturity) -> WithTwoFYFraxInAMOMature
+    //       currentFrax
+    //   addLiquidity -> WithTwoLiquidityInYieldSpace
+    //     currentFrax
+    //     warp(maturity) -> WithTwoLiquidityInYieldSpaceAMOMature
+    //       currentFrax
 }
