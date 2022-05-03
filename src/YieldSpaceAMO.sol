@@ -271,7 +271,7 @@ contract YieldSpaceAMO is Owned {
     /// @param seriesId fyFrax series being burned
     /// @param fyFraxAmount amount of fyFrax being burned
     /// @return fraxAmount amount of Frax recovered
-    /// @return fyFraxAmount amount of fyFrax stored in the AMO
+    /// @return fyFraxStored amount of fyFrax stored in the AMO
     function burnFyFrax(
         bytes6 seriesId,
         uint128 fyFraxAmount
