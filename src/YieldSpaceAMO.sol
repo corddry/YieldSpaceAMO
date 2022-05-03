@@ -133,15 +133,21 @@ contract YieldSpaceAMO is Owned {
         uint256 fyFraxAmount
     ) public view returns (uint256 fraxAmount) {
         Series storage _series = series[seriesId];
-        uint256 debt = cauldron.balances(series[seriesId].vaultId).art;
-        // TODO: Consider maturity
-        if (debt > fyFraxAmount) {
+
+        // After maturity, it's 1:1
+        if (block.timestamp > _series.maturity) {
             fraxAmount = fyFraxAmount;
         } else {
-            // TODO: Consider an out if the pool doesn't have enough liquidity. Try-catch and return zero.
-            fraxAmount =
-                debt +
-                _series.pool.sellFYTokenPreview((fyFraxAmount - debt).u128());
+            uint256 debt = cauldron.balances(series[seriesId].vaultId).art;
+            if (debt > fyFraxAmount) { // For as long as there is debt, it's 1:1
+                fraxAmount = fyFraxAmount;
+            } else { // The fyFrax over the debt, we would need to sell it.
+                try _series.pool.sellFYTokenPreview((fyFraxAmount - debt).u128()) returns (uint128 fraxBought) {
+                    fraxAmount = debt + fraxBought;
+                } catch (bytes memory) { // If for some reason the fyFrax can't be sold, we value it at zero
+                    fraxAmount = debt;
+                }
+            }
         }
     }
 
