@@ -395,7 +395,6 @@ contract YieldSpaceAMO is Owned {
         require(_series.vaultId != bytes12(0), "Series not found");
 
         //Transfer FRAX into the pool. Transfer FRAX into the FRAX Join. Borrow fyFRAX into the pool. Add liquidity.
-        // TODO: Should it use any surplus fyFrax held by the AMO first?
         _mintFyFrax(_series, address(_series.pool), fyFraxAmount);
         FRAX.transfer(address(_series.pool), fraxAmount);
         (fraxUsed, , poolMinted) = _series.pool.mint(
