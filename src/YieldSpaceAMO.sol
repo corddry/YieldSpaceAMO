@@ -256,6 +256,7 @@ contract YieldSpaceAMO is Owned {
 
     /// @notice mint fyFrax using FRAX as collateral 1:1 Frax to fyFrax
     /// @dev The Frax to work with needs to be in the AMO already.
+    /// If there is any fyFrax in the AMO for the right series, it's used first.
     /// @param _series fyFrax series being minted
     /// @param to destination for the fyFrax
     /// @param fraxAmount amount of Frax being used to mint fyFrax at 1:1
@@ -264,10 +265,10 @@ contract YieldSpaceAMO is Owned {
         address to,
         uint128 fraxAmount
     ) internal {
+        int128 fyFraxToMint = (fraxAmount - _series.fyToken.balanceOf(address(this))).u128().i128();
         //Transfer FRAX to the FRAX Join, add it as collateral, and borrow.
-        int128 _fraxAmount = fraxAmount.i128();
-        FRAX.transfer(fraxJoin, fraxAmount);
-        ladle.pour(_series.vaultId, to, _fraxAmount, _fraxAmount);
+        FRAX.transfer(fraxJoin, uint128(fyFraxToMint));
+        ladle.pour(_series.vaultId, to, fyFraxToMint, fyFraxToMint);
     }
 
     /// @notice recover Frax from an amount of fyFrax, repaying or redeeming.
@@ -338,7 +339,6 @@ contract YieldSpaceAMO is Owned {
         require(_series.vaultId != bytes12(0), "Series not found");
 
         // Mint fyFRAX into the pool, and sell it.
-        // TODO: Should it sell any surplus fyFrax held by the AMO first?
         _mintFyFrax(_series, address(_series.pool), fraxAmount);
         fraxReceived = _series.pool.sellFYToken(address(this), minFraxReceived);
         emit RatesIncreased(fraxAmount, fraxReceived);
