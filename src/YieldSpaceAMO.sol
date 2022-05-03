@@ -362,7 +362,7 @@ contract YieldSpaceAMO is Owned {
         //Transfer FRAX into the pool, sell it for fyFRAX into the fyFRAX contract, repay debt and withdraw FRAX collateral.
         FRAX.transfer(address(_series.pool), fraxAmount);
         uint256 fyFraxReceived = _series.pool.sellBase(
-            address(_series.fyToken), // TODO: Keep fyFRAX in the AMO instead.
+            address(this),
             minFyFraxReceived
         );
 
