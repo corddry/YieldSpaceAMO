@@ -313,7 +313,7 @@ contract YieldSpaceAMO is Owned {
                 ? (fyFraxAmount, 0)
                 : (debt, (fyFraxAmount - debt).u128());
 
-            _series.fyToken.transfer(address(_series.fyToken), fraxAmount); // TODO: Do we need the transfer?
+            // When repaying with fyFrax, we don't need to approve anything
             ladle.pour(
                 _series.vaultId,
                 to,
