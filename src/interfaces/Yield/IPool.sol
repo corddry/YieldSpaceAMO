@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >= 0.8.0;
-import "../utils/IERC20.sol";
-import "../utils/IERC2612.sol";
+pragma solidity 0.8.13;
+import "../IERC20.sol";
+import "../IERC2612.sol";
 import "./IFYToken.sol";
 
 
