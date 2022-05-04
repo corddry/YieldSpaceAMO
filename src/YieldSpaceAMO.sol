@@ -259,10 +259,10 @@ contract YieldSpaceAMO is Owned {
     function mintFyFrax(
         bytes6 seriesId,
         uint128 fraxAmount
-    ) public onlyByOwnGov {
+    ) public onlyByOwnGov returns (uint128 fyFraxMinted) {
         Series memory _series = series[seriesId];
         require(_series.vaultId != bytes12(0), "Series not found");
-        _mintFyFrax(_series, address(this), fraxAmount);
+        fyFraxMinted = _mintFyFrax(_series, address(this), fraxAmount);
     }
 
     /// @notice mint fyFrax using FRAX as collateral 1:1 Frax to fyFrax
@@ -275,12 +275,24 @@ contract YieldSpaceAMO is Owned {
         Series memory _series,
         address to,
         uint128 fraxAmount
-    ) internal {
-        int128 fyFraxToMint = (fraxAmount - _series.fyToken.balanceOf(address(this))).u128().i128();
-        //Transfer FRAX to the FRAX Join, add it as collateral, and borrow.
-        FRAX.transfer(fraxJoin, uint128(fyFraxToMint));
+    ) internal returns (uint128 fyFraxMinted) {
+        uint128 fyFraxAvailable = _series.fyToken.balanceOf(address(this)).u128();
 
-        ladle.pour(_series.vaultId, to, fyFraxToMint, fyFraxToMint);
+        if (fyFraxAvailable > fraxAmount) { // If we don't need to mint, then we don't do it.
+            _series.fyToken.transfer(to, fraxAmount);
+        } else if (fyFraxAvailable > 0) { // We have some fyFrax, but we need to mint more.
+            fyFraxMinted = fraxAmount - fyFraxAvailable;
+            _series.fyToken.transfer(to, fyFraxAvailable);
+        } else { // We need to mint the whole lot
+            fyFraxMinted = fraxAmount;
+        }
+
+        if (fyFraxMinted > 0) {
+            int128 fyFraxMinted_ = fyFraxMinted.i128();
+            //Transfer FRAX to the FRAX Join, add it as collateral, and borrow.
+            FRAX.transfer(fraxJoin, fyFraxMinted);
+            ladle.pour(_series.vaultId, to, fyFraxMinted_, fyFraxMinted_);
+        }
     }
 
     /// @notice recover Frax from an amount of fyFrax, repaying or redeeming.
