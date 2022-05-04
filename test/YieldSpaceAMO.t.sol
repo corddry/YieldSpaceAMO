@@ -732,6 +732,7 @@ contract YieldSpaceAMO_WithRatesIncreased is WithRatesIncreased {
         uint256 oldRatio = (uint256(fyTokenCachedBefore) * 1e18) / uint256(baseCachedBefore);
         uint128 expectedFyTokenIn = pool0.sellBasePreview(fraxAmount);
 
+        // send over fraxamount and call decrease rates
         base.mint(address(amo), fraxAmount);
         vm.expectEmit(false, false, false, true);
         emit RatesDecreased(fraxAmount, expectedFyTokenIn);
@@ -848,13 +849,11 @@ contract YieldSpaceAMO_WithRatesIncreased is WithRatesIncreased {
 //             decreaseRates
 //             decreaseRates - with preExistingFytokne
 //       removeLiquidity
-//       mintFYFrax -> WithFYFraxInAMO (and liquidity)
+//       mintFYFrax -> WithFYFraxInAMOAndLiquidity
 //         currentFrax
 //         mintFYFrax
 //         burnFYFrax
-//         showAllocations
 //         warp(maturity) -> WithFYFraxInAMOMature
-//           reverts?
 //           currentFrax
 //           burnFYFrax
 //       warp(maturity) -> WithLiquidityInYieldSpaceAMOMature
