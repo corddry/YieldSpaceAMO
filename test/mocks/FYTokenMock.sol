@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity 0.8.13;
 
-import "./BaseMock.sol";
+import "./FraxMock.sol";
 import "@yield-protocol/utils-v2/contracts/token/ERC20Permit.sol";
 
 
 contract FYTokenMock is ERC20Permit {
-    BaseMock public base;
+    FraxMock public base;
     uint32 public maturity;
 
-    constructor (BaseMock base_, uint32 maturity_)
+    constructor (FraxMock base_, uint32 maturity_)
         ERC20Permit(
-            "Test",
-            "TST",
+            "fyFRAX",
+            "fyFRAX",
             IERC20Metadata(address(base_)).decimals()
     ) {
         base = base_;
