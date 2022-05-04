@@ -832,21 +832,21 @@ contract YieldSpaceAMO_WithRatesIncreased is WithRatesIncreased {
 
 
 
-// Zero State
-// XaddSeries -> WithSeries
-//   Xremove series
-//   XaddAdditionalSeries => WithTwoSeries
-//     XmintFYFrax
-//     xaddLiquidity -> WithLiquidityInYieldSpace
-//       xadd liquidity with borrowing some fyfrax
-//       xadd liquidity with some fyFrax already there
-//       xadd liquidity with some frax already there
-//       xadd liquidity with both already there
-//       xaddLiquidity to a second pool
-//       increaseRates
-//       increaseRates - with preExistingFytokne
-//       decreaseRates
-//       decreaseRates - with preExistingFytokne
+// X Zero State
+// X addSeries -> WithSeries
+//   X remove series
+//   X addAdditionalSeries => WithTwoSeries
+//     X mintFYFrax
+//     X addLiquidity -> WithLiquidityInYieldSpace
+//       X add liquidity with borrowing some fyfrax
+//       X add liquidity with some fyFrax already there
+//       X add liquidity with some frax already there
+//       X add liquidity with both already there
+//       X addLiquidity to a second pool
+//       X increaseRates - with preExistingFytokne
+//       X increaseRates - WithIncreasedRates
+//             decreaseRates
+//             decreaseRates - with preExistingFytokne
 //       removeLiquidity
 //       mintFYFrax -> WithFYFraxInAMO (and liquidity)
 //         currentFrax
