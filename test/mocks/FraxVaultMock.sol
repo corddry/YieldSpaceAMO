@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity 0.8.13;
-import "yield-utils-v2/contracts/token/IERC20.sol";
+
+import "./FYTokenMock.sol";
 import "vault-interfaces/ICauldron.sol";
 import "vault-interfaces/IFYToken.sol";
 import "vault-interfaces/DataTypes.sol";
 import "yieldspace-interfaces/IPool.sol";
-import "./BaseMock.sol";
-import "./FYTokenMock.sol";
-
+import "yield-utils-v2/contracts/token/IERC20.sol";
 
 library CauldronMath {
     /// @dev Add a number (which might be negative) to a positive, and revert if the result is negative.
@@ -18,24 +17,24 @@ library CauldronMath {
 }
 
 
-/// @notice Simplified mock of the Yield Protocol for a single asset.
+/// @notice Simplified mock of the Yield Protocol for Frax.
 /// This contract is all the Cauldron, Ladle and Join.
-contract VaultMock {
+contract FraxVaultMock {
     using CauldronMath for uint128;
 
     ICauldron public immutable cauldron;
-    BaseMock public immutable base;
+    FraxMock public immutable base;
 
     mapping (bytes6 => DataTypes.Series) public series;
     mapping (bytes12 => DataTypes.Vault) public vaults;
     mapping (bytes12 => DataTypes.Balances) public balances;
     mapping (bytes6 => IPool) public pools;
 
-    uint96 public lastVaultId;
+    uint96 public lastVaultId = 1;
 
     constructor() {
         cauldron = ICauldron(address(this));
-        base = new BaseMock();
+        base = new FraxMock();
     }
 
     /// @notice Generate a new series and fyToken for the base at the given maturity.

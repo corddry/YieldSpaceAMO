@@ -18,16 +18,17 @@ pragma solidity 0.8.13;
 // Sam Kazemian: https://github.com/samkazemian
 // Dennis: https://github.com/denett
 
+import {Owned} from "./utils/Owned.sol";
+import {IFrax} from "./interfaces/IFrax.sol";
+import {ILadle} from "vault-interfaces/ILadle.sol";
+import {IPool} from "yieldspace-interfaces/IPool.sol";
+import {IFYToken} from "vault-interfaces/IFYToken.sol";
+import {ICauldron} from  "vault-interfaces/ICauldron.sol";
+import {IFraxAMOMinter} from "./interfaces/IFraxAMOMinter.sol";
 import {CastU256U128} from "yield-utils-v2/contracts/cast/CastU256U128.sol";
 import {CastU128I128} from "yield-utils-v2/contracts/cast/CastU128I128.sol";
-import {ICauldron} from  "vault-interfaces/ICauldron.sol";
-import {ILadle} from "vault-interfaces/ILadle.sol";
-import {IFYToken} from "vault-interfaces/IFYToken.sol";
-// import "vault-interfaces/DataTypes.sol";
-import {IPool} from "yieldspace-interfaces/IPool.sol";
-import {IFrax} from "./interfaces/IFrax.sol";
-import {IFraxAMOMinter} from "./interfaces/IFraxAMOMinter.sol";
-import {Owned} from "./utils/Owned.sol";
+
+import "forge-std/console.sol"; // TODO: DELETE ME
 
 
 contract YieldSpaceAMO is Owned {
@@ -58,7 +59,7 @@ contract YieldSpaceAMO is Owned {
     ICauldron public immutable cauldron;
     address public immutable fraxJoin;
     mapping(bytes6 => Series) public series;
-    bytes6[] public seriesIterator;
+    bytes6[] internal _seriesIterator;
 
     // AMO
     uint256 public currentAMOmintedFRAX; /// @notice The amount of FRAX tokens minted by the AMO
@@ -69,9 +70,11 @@ contract YieldSpaceAMO is Owned {
         address _ownerAddress,
         address _amoMinterAddress,
         address _yieldLadle,
-        address _yieldFraxJoin
+        address _yieldFraxJoin,
+        address _frax
     ) Owned(_ownerAddress) {
-        FRAX = IFrax(0x853d955aCEf822Db058eb8505911ED77F175b99e);
+        FRAX = IFrax(_frax); // Using an immutable here makes it easier for testing
+        // FRAX = IFrax(0x853d955aCEf822Db058eb8505911ED77F175b99e);
         amoMinter = IFraxAMOMinter(_amoMinterAddress);
         timelockAddress = amoMinter.timelock_address();
 
@@ -105,16 +108,16 @@ contract YieldSpaceAMO is Owned {
 
     function showAllocations(
         bytes6 seriesId
-    ) public view returns (uint256[6] memory return_arr) {
+    ) public view returns (uint256[6] memory) {
         Series storage _series = series[seriesId];
         require(_series.vaultId != bytes12(0), "Series not found");
-
+        uint256 supply = _series.pool.totalSupply();
         uint256 fraxInContract = FRAX.balanceOf(address(this));
         uint256 fraxAsCollateral = cauldron.balances(_series.vaultId).ink;
-        uint256 fraxInLP = (FRAX.balanceOf(address(_series.pool)) *
+        uint256 fraxInLP = supply == 0 ? 0 : (FRAX.balanceOf(address(_series.pool)) *
             _series.pool.balanceOf(address(this))) / _series.pool.totalSupply();
         uint256 fyFraxInContract = _series.fyToken.balanceOf(address(this));
-        uint256 fyFraxInLP = (_series.fyToken.balanceOf(address(_series.pool)) *
+        uint256 fyFraxInLP = supply == 0 ? 0 : (_series.fyToken.balanceOf(address(_series.pool)) *
             _series.pool.balanceOf(address(this))) / _series.pool.totalSupply();
         uint256 LPOwned = _series.pool.balanceOf(address(this));
         return [
@@ -158,12 +161,12 @@ contract YieldSpaceAMO is Owned {
 
         // Add up the amount of FRAX in LP positions
         // Add up the value in Frax from all fyFRAX LP positions
-        uint256 activeSeries = seriesIterator.length;
+        uint256 activeSeries = _seriesIterator.length;
         for (uint256 s; s < activeSeries; ++s) {
-            bytes6 seriesId = seriesIterator[s];
+            bytes6 seriesId = _seriesIterator[s];
             Series storage _series = series[seriesId];
-            uint256 poolShare = (1e18 * _series.pool.balanceOf(address(this))) /
-                _series.pool.totalSupply();
+            uint256 supply = _series.pool.totalSupply();
+            uint256 poolShare = supply == 0 ? 0 : (1e18 * _series.pool.balanceOf(address(this))) / supply;
 
             // Add value from Frax in LP positions
             fraxAmount +=
@@ -185,6 +188,14 @@ contract YieldSpaceAMO is Owned {
         valueAsCollateral =
             (valueAsFrax * FRAX.global_collateral_ratio()) /
             1e6; // This assumes that FRAX.global_collateral_ratio() has 6 decimals
+    }
+
+    /// @notice returns entire _seriesIterator array.
+    /// @dev Solcurity Standard https://github.com/Rari-Capital/solcurity:
+    /// V9 - If it's a public array, is a separate function provided to return the full array
+    /// Also useful for testing.
+    function seriesIterator() external view returns (bytes6[] memory seriesIterator_) {
+        seriesIterator_ = _seriesIterator;
     }
 
     /* ========= RESTRICTED FUNCTIONS ======== */
@@ -209,19 +220,19 @@ contract YieldSpaceAMO is Owned {
             maturity: uint96(fyToken.maturity()) // Will work for a while.
         });
 
-        seriesIterator.push(seriesId);
+        _seriesIterator.push(seriesId);
     }
 
     /// @notice remove a new series in the AMO, to keep gas costs in place
     /// @param seriesId the series being removed
-    /// @param seriesIndex the index in the seriesIterator for the series being removed
+    /// @param seriesIndex the index in the _seriesIterator for the series being removed
     function removeSeries(
         bytes6 seriesId,
         uint256 seriesIndex
     ) public onlyByOwnGov {
-        require(seriesId == seriesIterator[seriesIndex], "Index mismatch");
-        Series storage _series = series[seriesId];
+        Series memory _series = series[seriesId];
         require(_series.vaultId != bytes12(0), "Series not found");
+        require(seriesId == _seriesIterator[seriesIndex], "Index mismatch");
         require(
             _series.fyToken.balanceOf(address(this)) == 0,
             "Outstanding fyToken balance"
@@ -234,11 +245,11 @@ contract YieldSpaceAMO is Owned {
         delete series[seriesId];
 
         // Remove the seriesId from the iterator, by replacing for the tail and popping.
-        uint256 activeSeries = seriesIterator.length;
+        uint256 activeSeries = _seriesIterator.length;
         if (seriesIndex < activeSeries - 1) {
-            seriesIterator[seriesIndex] = seriesIterator[activeSeries - 1];
+            _seriesIterator[seriesIndex] = _seriesIterator[activeSeries - 1];
         }
-        seriesIterator.pop();
+        _seriesIterator.pop();
     }
 
     /// @notice mint fyFrax using FRAX as collateral 1:1 Frax to fyFrax
@@ -268,6 +279,7 @@ contract YieldSpaceAMO is Owned {
         int128 fyFraxToMint = (fraxAmount - _series.fyToken.balanceOf(address(this))).u128().i128();
         //Transfer FRAX to the FRAX Join, add it as collateral, and borrow.
         FRAX.transfer(fraxJoin, uint128(fyFraxToMint));
+
         ladle.pour(_series.vaultId, to, fyFraxToMint, fyFraxToMint);
     }
 
@@ -376,10 +388,10 @@ contract YieldSpaceAMO is Owned {
     }
 
     /// @notice mint fyFrax tokens, pair with FRAX and provide liquidity
-    /// @dev The Frax to work with needs to be in the AMO already.
+    /// @dev The Frax to work with needs to be in the AMO already for both fraxAmount and fyFraxAmount
     /// @param seriesId fyFrax series we are adding liquidity for
-    /// @param fraxAmount amount of Frax being provided as liquidity
-    /// @param fyFraxAmount amount of fyFrax being provided as liquidity
+    /// @param fraxAmount Frax being provided as liquidity
+    /// @param fyFraxAmount amount of fyFrax being provided as liquidity - this amount of frax also needs to be in AMO already
     /// @param minRatio minimum Frax/fyFrax ratio accepted in the pool
     /// @param maxRatio maximum Frax/fyFrax ratio accepted in the pool
     /// @return fraxUsed amount of Frax used for minting, it could be less than `fraxAmount`
@@ -393,7 +405,6 @@ contract YieldSpaceAMO is Owned {
     ) public onlyByOwnGov returns (uint256 fraxUsed, uint256 poolMinted) {
         Series storage _series = series[seriesId];
         require(_series.vaultId != bytes12(0), "Series not found");
-
         //Transfer FRAX into the pool. Transfer FRAX into the FRAX Join. Borrow fyFRAX into the pool. Add liquidity.
         _mintFyFrax(_series, address(_series.pool), fyFraxAmount);
         FRAX.transfer(address(_series.pool), fraxAmount);
