@@ -313,16 +313,11 @@ contract YieldSpaceAMO is Owned {
             _series.fyToken.transfer(address(_series.fyToken), fyFraxAmount);
             fraxAmount = _series.fyToken.redeem(to, fyFraxAmount);
         } else {
-            console.log(1);
             // Before maturity, repay as much debt as possible, and keep any surplus fyFrax
             uint256 debt = cauldron.balances(_series.vaultId).art;
             (fraxAmount, fyFraxStored) = debt > fyFraxAmount ? (fyFraxAmount, 0) : (debt, (fyFraxAmount - debt).u128());
-            console.log("+ + file: YieldSpaceAMO.sol + line 339 + )internalreturns + debt", debt);
-            console.log("+ + file: YieldSpaceAMO.sol + line 330 + fyFraxAmount", fyFraxAmount);
-            console.log("+ + file: YieldSpaceAMO.sol + line 340 + )internalreturns + fraxAmount", fraxAmount);
             // When repaying with fyFrax, we don't need to approve anything
             ladle.pour(_series.vaultId, to, -(fraxAmount.u128().i128()), -(fraxAmount.u128().i128()));
-            console.log(2);
         }
     }
 
@@ -411,11 +406,10 @@ contract YieldSpaceAMO is Owned {
     ) public onlyByOwnGov returns (uint256 fraxReceived, uint256 fyFraxStored) {
         Series storage _series = series[seriesId];
         require(_series.vaultId != bytes12(0), "Series not found");
-
-        //Transfer pool tokens into the pool. Burn pool tokens, with the fyFRAX going into the fyFRAX contract.
+        //Transfer pool tokens into the pool. Burn pool tokens, with the fyFRAX coming into this contract and then burned.
         //Instruct the Ladle to repay as much debt as fyFRAX from the burn, and withdraw the same amount of collateral.
         _series.pool.transfer(address(_series.pool), poolAmount);
-        (, , uint256 fyFraxAmount) = _series.pool.burn(address(this), address(_series.fyToken), minRatio, maxRatio);
+        (, , uint256 fyFraxAmount) = _series.pool.burn(address(this), address(this), minRatio, maxRatio);
         (fraxReceived, fyFraxStored) = _burnFyFrax(_series, address(this), fyFraxAmount.u128());
         emit LiquidityRemoved(fraxReceived, poolAmount);
     }
