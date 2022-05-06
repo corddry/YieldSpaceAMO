@@ -154,6 +154,17 @@ abstract contract WithTwoSeriesAdded is WithSeriesAdded {
     }
 }
 
+abstract contract WithDebt is WithTwoSeriesAdded {
+    function setUp() public virtual override {
+        super.setUp();
+        uint128 fraxAmount = 1_000_000 * 1e18;
+        base.mint(address(amo), fraxAmount);
+
+        vm.prank(owner);
+        uint256 fyFraxMinted = amo.mintFyFrax(series0Id, fraxAmount);
+    }
+}
+
 abstract contract WithLiquidityAddedToAMM is WithTwoSeriesAdded {
     function setUp() public virtual override {
         super.setUp();
@@ -428,6 +439,93 @@ contract YieldSpaceAMO_WithTwoSeriesAdded is WithTwoSeriesAdded {
         );
     }
 }
+
+contract YieldSpaceAMO_WithDebt is WithDebt {
+    // Tests in this suite:
+    //       X burnFyFrax by repaying debt
+    //       X burnFyFrax by repaying debt and storing surplus
+
+        function testUnit_burnFyFrax_repay() public {
+        console.log("burnFyFrax() repays debt if it can");
+        uint128 fyFraxAmount = 10_000 * 1e18;
+
+        uint256 baseAmoBefore = uint256(base.balanceOf(address(amo)));
+        uint256 fyAmoBefore = uint256(fyToken0.balanceOf(address(amo)));
+
+        // burn some fyFrax, repaying debt
+        vm.prank(owner);
+        amo.burnFyFrax(series0Id, fyFraxAmount);
+
+        require(uint256(fyToken0.balanceOf(address(amo))) == fyAmoBefore - fyFraxAmount);
+        require(uint256(base.balanceOf(address(amo))) == baseAmoBefore + fyFraxAmount);
+
+        // check view fns
+        /* uint256 debt = fyTokenCachedAfter - pool0.totalSupply();
+        uint256[6] memory expectedAllocations = [
+            baseAmoBefore + expectedFyTokenIn, // [0] fraxInContract: unallocated fees
+            debt, // [1] fraxAsCollateral: Frax used as collateral
+            baseCachedAfter, // [2] fraxInLP: The Frax our LP tokens can lay claim to
+            0, // [3] fyFraxInContract: fyFrax sitting in AMO, should be 0
+            debt, // [4] fyFraxInLP: fyFrax our LP can claim
+            poolAmoBefore // [5] LPOwned: number of LP tokens
+        ];
+        displayViewFns();
+        checkViews(
+            CheckViewsParams(
+                series0Id, // seriesId_showAllocations
+                expectedAllocations, // expected_showAllocations
+                series0Id, // seriesId_fraxValue
+                60_000 * 1e18, // fyFraxAmount_fraxValue
+                debt + pool0.sellFYTokenPreview(uint128(60_000 * 1e18 - debt)), // expectedAmount_fraxValue
+                fyTokenCachedBefore + 10_000 * 1e18, // expectedFraxAmount_currentFrax
+                fyTokenCachedBefore + 10_000 * 1e18 // expectedValueAsFrax_dollarBalances
+            )
+        ); */
+    }
+
+        function testUnit_burnFyFrax_store() public {
+        console.log("burnFyFrax() only burns up to the debt limit");
+        uint128 extraFyFraxAmount = 10_000 * 1e18;
+
+        (bytes12 vaultId, , , ) = amo.series(series0Id);
+        (uint128 debt, ) = yield.balances(vaultId);
+        uint256 baseAmoBefore = uint256(base.balanceOf(address(amo)));
+
+        fyToken0.mint(address(amo), extraFyFraxAmount);
+        uint256 fyAmoBefore = uint256(fyToken0.balanceOf(address(amo)));
+        require(debt + extraFyFraxAmount == fyAmoBefore, "Just checking");
+
+
+        // try burning all fyFrax, but stop when all debt is repaid
+        vm.prank(owner);
+        amo.burnFyFrax(series0Id, uint128(fyAmoBefore));
+
+        require(uint256(fyToken0.balanceOf(address(amo))) == extraFyFraxAmount);
+        require(uint256(base.balanceOf(address(amo))) == baseAmoBefore + debt);
+
+        // check view fns
+        /* uint256 debt = fyTokenCachedAfter - pool0.totalSupply();
+        uint256[6] memory expectedAllocations = [
+            baseAmoBefore + expectedFyTokenIn, // [0] fraxInContract: unallocated fees
+            debt, // [1] fraxAsCollateral: Frax used as collateral
+            baseCachedAfter, // [2] fraxInLP: The Frax our LP tokens can lay claim to
+            0, // [3] fyFraxInContract: fyFrax sitting in AMO, should be 0
+            debt, // [4] fyFraxInLP: fyFrax our LP can claim
+            poolAmoBefore // [5] LPOwned: number of LP tokens
+        ];
+        displayViewFns();
+        checkViews(
+            CheckViewsParams(
+                series0Id, // seriesId_showAllocations
+                expectedAllocations, // expected_showAllocations
+                series0Id, // seriesId_fraxValue
+                60_000 * 1e18, // fyFraxAmount_fraxValue
+                debt + pool0.sellFYTokenPreview(uint128(60_000 * 1e18 - debt)), // expectedAmount_fraxValue
+                fyTokenCachedBefore + 10_000 * 1e18, // expectedFraxAmount_currentFrax
+                fyTokenCachedBefore + 10_000 * 1e18 // expectedValueAsFrax_dollarBalances
+            )
+        ); */
+    }
 
 contract YieldSpaceAMO_WithLiquidityAddedToAMM is WithLiquidityAddedToAMM {
     // Tests in this suite:
@@ -773,65 +871,6 @@ contract YieldSpaceAMO_WithRatesIncreased is WithRatesIncreased {
         );
     }
 
-    // function testUnit_decreaseeRates_PreExistingFyFrax() public {
-    //     console.log("decreaseRates() can decrease rates with pre-existing token in pool");
-    //     uint128 fraxAmount = 10_000 * 1e18;
-
-    //     uint256 baseAmoBefore = uint256(base.balanceOf(address(amo)));
-    //     uint256 basePool0Before = uint256(base.balanceOf(address(pool0)));
-    //     uint256 poolAmoBefore = uint256(pool0.balanceOf(address(amo)));
-    //     uint256 fyAmoBefore = uint256(fyToken0.balanceOf(address(amo)));
-    //     uint256 fyPool0Before = uint256(fyToken0.balanceOf(address(pool0)));
-    //     (uint112 baseCachedBefore, uint112 fyTokenCachedBefore, ) = pool0.getCache();
-    //     uint256 oldRatio = (uint256(fyTokenCachedBefore) * 1e18) / uint256(baseCachedBefore);
-    //     uint128 expectedFyTokenIn = pool0.sellBasePreview(fraxAmount);
-    //     uint128 preExistingFyTokens = 100_000 * 1e18;
-
-    //     // send extra fyTokens in pool
-    //     fyToken0.mint(address(amo), preExistingFyTokens);
-
-    //     // send over fraxamount and call decrease rates
-    //     base.mint(address(amo), fraxAmount);
-    //     vm.expectEmit(false, false, false, true);
-    //     emit RatesDecreased(fraxAmount, expectedFyTokenIn);
-    //     vm.prank(owner);
-    //     amo.decreaseRates(series0Id, fraxAmount, 9_500 * 1e18);
-
-    //     (uint112 baseCachedAfter, uint112 fyTokenCachedAfter, ) = pool0.getCache();
-    //     require(baseCachedAfter == baseCachedBefore + fraxAmount);
-    //     require(fyTokenCachedAfter == fyTokenCachedBefore - expectedFyTokenIn);
-    //     require((uint256(fyTokenCachedAfter) * 1e18) / uint256(baseCachedAfter) < oldRatio); // rates decreased
-    //     console.log("+ + file: YieldSpaceAMO.t.sol + line 804 + testUnit_decreaseeRates_PreExistingFyFrax + uint256(fyToken0.balanceOf(address(amo)))", uint256(fyToken0.balanceOf(address(amo))));
-    //     require(uint256(fyToken0.balanceOf(address(amo))) == preExistingFyTokens);
-    //     require(uint256(base.balanceOf(address(amo))) == baseAmoBefore + expectedFyTokenIn);
-    //     require(uint256(base.balanceOf(address(pool0))) == basePool0Before + fraxAmount);
-    //     require(uint256(pool0.balanceOf(address(amo))) == poolAmoBefore);
-    //     require(uint256(fyToken0.balanceOf(address(pool0))) == fyPool0Before - expectedFyTokenIn);
-
-    //     // check view fns
-    //     uint256 debt = fyTokenCachedAfter - pool0.totalSupply();
-    //     uint256[6] memory expectedAllocations = [
-    //         baseAmoBefore + expectedFyTokenIn, // [0] fraxInContract: unallocated fees
-    //         debt, // [1] fraxAsCollateral: Frax used as collateral
-    //         baseCachedAfter, // [2] fraxInLP: The Frax our LP tokens can lay claim to
-    //         0, // [3] fyFraxInContract: fyFrax sitting in AMO, should be 0
-    //         debt, // [4] fyFraxInLP: fyFrax our LP can claim
-    //         poolAmoBefore // [5] LPOwned: number of LP tokens
-    //     ];
-    //     displayViewFns();
-    //     checkViews(
-    //         CheckViewsParams(
-    //             series0Id, // seriesId_showAllocations
-    //             expectedAllocations, // expected_showAllocations
-    //             series0Id, // seriesId_fraxValue
-    //             60_000 * 1e18, // fyFraxAmount_fraxValue
-    //             debt + pool0.sellFYTokenPreview(uint128(60_000 * 1e18 - debt)), // expectedAmount_fraxValue
-    //             fyTokenCachedBefore + 10_000 * 1e18, // expectedFraxAmount_currentFrax
-    //             fyTokenCachedBefore + 10_000 * 1e18 // expectedValueAsFrax_dollarBalances
-    //         )
-    //     );
-    // }
-
     /* removeLiquidity()
      ******************************************************************************************************************/
     function testReverts_removeLiquidity_SeriesNotFound() public {
@@ -873,7 +912,9 @@ contract YieldSpaceAMO_WithRatesIncreased is WithRatesIncreased {
 // X addSeries -> WithSeries
 //   X remove series
 //   X addAdditionalSeries => WithTwoSeries
-//     X mintFYFrax
+//     X mintFyFrax
+//     X burnFyFrax
+//     X burnFyFrax up to debt level
 //     X add liquidity with borrowing some fyfrax
 //     X add liquidity with some fyFrax already there
 //     X add liquidity with some frax already there
@@ -883,7 +924,6 @@ contract YieldSpaceAMO_WithRatesIncreased is WithRatesIncreased {
 //       X increaseRates - with preExistingFytokne
 //       X increaseRates - WithIncreasedRates
 //             X decreaseRates
-//             ? decreaseRates - with preExistingFytoken STUCK ON THIS ONE
 //             removeLiquidity
 //             -> afterMaturity (cannot mint fyFrax after maturity)
 //                 check views
