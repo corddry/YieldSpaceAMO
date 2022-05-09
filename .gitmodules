@@ -10,9 +10,6 @@
 	path = lib/vault-interfaces
 	url = https://github.com/yieldprotocol/vault-interfaces
 	branch = main
-[submodule "lib/forge-std"]
-	path = lib/forge-std
-	url = https://github.com/foundry-rs/forge-std
 [submodule "lib/yieldspace-v2"]
 	path = lib/yieldspace-v2
 	url = https://github.com/yieldprotocol/yieldspace-v2
