@@ -246,11 +246,67 @@ contract YieldSpaceAMO_ZeroState is ZeroState {
             )
         );
     }
-}
 
-contract YieldSpaceAMO_WithSeriesAdded is WithSeriesAdded {
-    /* removeSeries()
-     ******************************************************************************************************************/
+    // NOTE: revert on Series not found tested above in: testReverts_addLiquidityToAMM_SeriesNotFound()
+
+    function testReverts_mintFyFrax_NotOwner() public {
+        revert();
+        /* console.log("addLiquidity() reverts if not owner or timelock");
+
+        uint128 fraxAmount = 1_000_000 * 1e18;
+        uint128 fyFraxAmount = 1_000_000 * 1e18;
+        vm.expectRevert("Not owner or timelock");
+        (uint256 fraxUsed, uint256 poolMinted) = amo.addLiquidityToAMM(series0Id, fraxAmount, fyFraxAmount, 0, 1); */
+    }
+
+    function testReverts_burnFyFrax_NotOwner() public {
+        revert();
+        /* console.log("addLiquidity() reverts if not owner or timelock");
+
+        uint128 fraxAmount = 1_000_000 * 1e18;
+        uint128 fyFraxAmount = 1_000_000 * 1e18;
+        vm.expectRevert("Not owner or timelock");
+        (uint256 fraxUsed, uint256 poolMinted) = amo.addLiquidityToAMM(series0Id, fraxAmount, fyFraxAmount, 0, 1); */
+    }
+
+    function testReverts_increaseRates_NotOwner() public {
+        revert();
+        /* console.log("addLiquidity() reverts if not owner or timelock");
+
+        uint128 fraxAmount = 1_000_000 * 1e18;
+        uint128 fyFraxAmount = 1_000_000 * 1e18;
+        vm.expectRevert("Not owner or timelock");
+        (uint256 fraxUsed, uint256 poolMinted) = amo.addLiquidityToAMM(series0Id, fraxAmount, fyFraxAmount, 0, 1); */
+    }
+
+    function testReverts_decreaseRates_NotOwner() public {
+        revert();
+        /* console.log("addLiquidity() reverts if not owner or timelock");
+
+        uint128 fraxAmount = 1_000_000 * 1e18;
+        uint128 fyFraxAmount = 1_000_000 * 1e18;
+        vm.expectRevert("Not owner or timelock");
+        (uint256 fraxUsed, uint256 poolMinted) = amo.addLiquidityToAMM(series0Id, fraxAmount, fyFraxAmount, 0, 1); */
+    }
+
+    function testReverts_addLiquidityTo_NotOwner() public {
+        console.log("addLiquidity() reverts if not owner or timelock");
+
+        uint128 fraxAmount = 1_000_000 * 1e18;
+        uint128 fyFraxAmount = 1_000_000 * 1e18;
+        vm.expectRevert("Not owner or timelock");
+        (uint256 fraxUsed, uint256 poolMinted) = amo.addLiquidityToAMM(series0Id, fraxAmount, fyFraxAmount, 0, 1);
+    }
+
+    function testReverts_removeLiquidityTo_NotOwner() public {
+        revert();
+        /* console.log("addLiquidity() reverts if not owner or timelock");
+
+        uint128 fraxAmount = 1_000_000 * 1e18;
+        uint128 fyFraxAmount = 1_000_000 * 1e18;
+        vm.expectRevert("Not owner or timelock");
+        (uint256 fraxUsed, uint256 poolMinted) = amo.addLiquidityToAMM(series0Id, fraxAmount, fyFraxAmount, 0, 1); */
+    }
 
     function testReverts_removeSeries_SeriesNotFound() public {
         console.log("removeSeries() reverts if series not found");
@@ -259,6 +315,55 @@ contract YieldSpaceAMO_WithSeriesAdded is WithSeriesAdded {
         amo.removeSeries(series1Id, 0);
     }
 
+    function testReverts_mintFyFrax_SeriesNotFound() public {
+        console.log("mintFyFrax() reverts if series not found");
+        vm.expectRevert("Series not found");
+        vm.prank(owner);
+        amo.mintFyFrax(series1Id, 10000000);
+    }
+
+    function testReverts_burnFyFrax_SeriesNotFound() public {
+        revert();
+        /* console.log("mintFyFrax() reverts if series not found");
+        vm.expectRevert("Series not found");
+        vm.prank(owner);
+        amo.mintFyFrax(series1Id, 10000000); */
+    }
+
+    function testReverts_increaseRates_SeriesNotFound() public {
+        revert();
+        /* console.log("mintFyFrax() reverts if series not found");
+        vm.expectRevert("Series not found");
+        vm.prank(owner);
+        amo.mintFyFrax(series1Id, 10000000); */
+    }
+
+
+    function testReverts_decreaseRates_SeriesNotFound() public {
+        revert();
+        /* console.log("mintFyFrax() reverts if series not found");
+        vm.expectRevert("Series not found");
+        vm.prank(owner);
+        amo.mintFyFrax(series1Id, 10000000); */
+    }
+
+    function testReverts_addLiquidityToAMM_SeriesNotFound() public {
+        console.log("addLiquidityToAMM() reverts if series not found");
+        vm.expectRevert("Series not found");
+        vm.prank(owner);
+        amo.addLiquidityToAMM(series1Id, 1, 1, 0, 1);
+    }
+
+    function testReverts_removeLiquidityToAMM_SeriesNotFound() public {
+        revert();
+        /* console.log("addLiquidityToAMM() reverts if series not found");
+        vm.expectRevert("Series not found");
+        vm.prank(owner);
+        amo.addLiquidityToAMM(series1Id, 1, 1, 0, 1); */
+    }
+}
+
+contract YieldSpaceAMO_WithSeriesAdded is WithSeriesAdded {
     // NOTE: The test for reverting on "Index mismatch" is found below in WithTwoSeriesAdded tests.
 
     function testReverts_removeSeries_OutstandingFyTokenBal() public {
@@ -291,25 +396,6 @@ contract YieldSpaceAMO_WithSeriesAdded is WithSeriesAdded {
         vm.prank(owner);
         amo.removeSeries(series0Id, 0);
         require(amo.seriesIterator().length == 0);
-    }
-
-    /* mintFyFrax()
-     ******************************************************************************************************************/
-    function testReverts_mintFyFrax_SeriesNotFound() public {
-        console.log("mintFyFrax() reverts if series not found");
-        vm.expectRevert("Series not found");
-        vm.prank(owner);
-        amo.mintFyFrax(series1Id, 10000000);
-    }
-
-    /* addLiquidityToAMM()
-     ******************************************************************************************************************/
-
-    function testReverts_addLiquidityToAMM_SeriesNotFound() public {
-        console.log("addLiquidityToAMM() reverts if series not found");
-        vm.expectRevert("Series not found");
-        vm.prank(owner);
-        amo.addLiquidityToAMM(series1Id, 1, 1, 0, 1);
     }
 
     /* addSeries()
@@ -395,17 +481,6 @@ contract YieldSpaceAMO_WithTwoSeriesAdded is WithTwoSeriesAdded {
 
     /* addLiquidity()
      ******************************************************************************************************************/
-
-    // NOTE: revert on Series not found tested above in: testReverts_addLiquidityToAMM_SeriesNotFound()
-
-    function testReverts_addLiquidityTo_NotOwner() public {
-        console.log("addLiquidity() reverts if not owner or timelock");
-
-        uint128 fraxAmount = 1_000_000 * 1e18;
-        uint128 fyFraxAmount = 1_000_000 * 1e18;
-        vm.expectRevert("Not owner or timelock");
-        (uint256 fraxUsed, uint256 poolMinted) = amo.addLiquidityToAMM(series0Id, fraxAmount, fyFraxAmount, 0, 1);
-    }
 
     function testUnit_addLiquidityToAMM_FraxOnly() public {
         console.log("addLiquidity() can add first time liquidity to AMM with frax only");
