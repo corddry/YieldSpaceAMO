@@ -197,14 +197,6 @@ abstract contract WithRatesIncreased is WithLiquidityAddedToAMM {
     }
 }
 
-abstract contract WithMatureLiquidity is WithRatesIncreased {
-    function setUp() public virtual override {
-        super.setUp();
-        
-        vm.warp(pool0.maturity() + 1);
-    }
-}
-
 contract YieldSpaceAMO_ZeroState is ZeroState {
     /* addSeries()
      ******************************************************************************************************************/
@@ -970,33 +962,6 @@ contract YieldSpaceAMO_WithRatesIncreased is WithRatesIncreased {
     }
 }
 
-contract YieldSpaceAMO_WithMatureLiquidity is WithMatureLiquidity {
-    // Tests in this suite
-    //      X removeLiquidity after maturity
-    
-    function testUnit_removeLiquidityMature() public {
-        console.log("removeLiquidity() can remove liquidity from the AMM after maturity");
-        (uint112 baseCached, uint112 fyTokenCached, ) = pool0.getCache();
-        uint256 priorAMOLPTokenBalance = pool0.balanceOf(address(amo));
-        uint256 priorPoolBaseBalance = base.balanceOf(address(pool0));
-
-        uint256 lpTokensToRemove = 10_000 * 1e18;
-
-        vm.expectEmit(false, false, false, true);
-        emit LiquidityRemoved(lpTokensToRemove / 20, lpTokensToRemove);
-        vm.prank(owner);
-        (uint256 fraxUsed, uint256 poolMinted) = amo.removeLiquidityFromAMM(series0Id, lpTokensToRemove, 1900 * 1e16, 1905 * 1e16);
-        // require(pool0.balanceOf(address(amo)) == expectedLpTokens + priorAMOLPTokenBalance);
-        // require(fyToken0.balanceOf(address(amo)) == 0);
-        // require(base.balanceOf(address(amo)) == 0);
-        // require(base.balanceOf(address(pool0)) == fraxAmount + priorPoolBaseBalance);
-        // (uint112 baseCached, uint112 fyTokenCached, ) = pool0.getCache();
-        // require(baseCached == fraxAmount + priorPoolBaseBalance);
-        // require(fyTokenCached == priorAMOLPTokenBalance + expectedLpTokens); // "virtual fyToken balance" 1m + 50k
-    }
-}
-
-
 // X Zero State
 // X addSeries -> WithSeries
 //   X remove series
@@ -1017,6 +982,4 @@ contract YieldSpaceAMO_WithMatureLiquidity is WithMatureLiquidity {
 //         \ removeLiquidity
 //         -> afterMaturity
 //             check views
-//           \ removeLiquidity
-//             check views w fyFrax in amo
 //
