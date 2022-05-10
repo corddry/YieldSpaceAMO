@@ -28,8 +28,6 @@ import {IFraxAMOMinter} from "./interfaces/IFraxAMOMinter.sol";
 import {CastU256U128} from "yield-utils-v2/contracts/cast/CastU256U128.sol";
 import {CastU128I128} from "yield-utils-v2/contracts/cast/CastU128I128.sol";
 
-import "forge-std/console.sol"; // TODO: DELETE ME
-
 contract YieldSpaceAMO is Owned {
     using CastU256U128 for uint256;
     using CastU128I128 for uint128;
@@ -72,8 +70,7 @@ contract YieldSpaceAMO is Owned {
         address _yieldFraxJoin,
         address _frax
     ) Owned(_ownerAddress) {
-        FRAX = IFrax(_frax); // Using an immutable here makes it easier for testing
-        // FRAX = IFrax(0x853d955aCEf822Db058eb8505911ED77F175b99e);
+        FRAX = IFrax(_frax);
         amoMinter = IFraxAMOMinter(_amoMinterAddress);
         timelockAddress = amoMinter.timelock_address();
 
