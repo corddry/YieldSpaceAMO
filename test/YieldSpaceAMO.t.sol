@@ -16,6 +16,27 @@ import {YieldMath} from "yieldspace-v2/contracts/YieldMath.sol";
 import {IERC20} from "yield-utils-v2/contracts/token/IERC20.sol";
 import {SafeERC20Namer} from "yield-utils-v2/contracts/token/SafeERC20Namer.sol";
 
+// TESTING STATE TREE:
+// X Zero State
+// X addSeries -> WithSeries
+//   X remove series
+//   X addAdditionalSeries => WithTwoSeries
+//     X mintFyFrax
+//     X burnFyFrax
+//     X burnFyFrax up to debt level
+//     X burnFyFrax with mature fyFrax
+//     X add liquidity with borrowing some fyfrax
+//     X add liquidity with some fyFrax already there
+//     X add liquidity with some frax already there
+//     X add liquidity with both already there
+//     X addLiquidity to a second pool
+//     X addLiquidity -> WithLiquidityInYieldSpace
+//       X increaseRates - with preExistingFytokne
+//       X increaseRates - WithIncreasedRates
+//         X decreaseRates
+//         X removeLiquidity
+//         X warp to maturity and check views
+
 abstract contract ZeroState is Test {
     FraxVaultMock public yield;
     FraxMock public base;
@@ -55,13 +76,14 @@ abstract contract ZeroState is Test {
 
     struct CheckViewsParams {
         bytes6 seriesId_showAllocations;
+        uint256[6] expected_showAllocations;
+        // expected_showAllocations based on showAllocations return value:
         // [0] fraxInContract: unallocated fees
         // [1] fraxAsCollateral: Frax used as collateral
         // [2] fraxInLP: The Frax our LP tokens can lay claim to
         // [3] fyFraxInContract: fyFrax sitting in AMO, should be 0
         // [4] fyFraxInLP: fyFrax our LP can claim
         // [5] LPOwned: number of LP tokens
-        uint256[6] expected_showAllocations;
         bytes6 seriesId_fraxValue;
         uint256 fyFraxAmount_fraxValue;
         uint256 expectedAmount_fraxValue;
@@ -126,72 +148,6 @@ abstract contract ZeroState is Test {
         newFyToken = FYTokenMock(address(fyToken_));
         newPool = new Pool(IERC20(address(base)), fyToken_, ts, g1, g2);
         yield.addPool(seriesId, newPool);
-    }
-}
-
-abstract contract WithSeriesAdded is ZeroState {
-    FYTokenMock public fyToken0; // first token added
-    Pool public pool0; // first pool added
-
-    function setUp() public virtual override {
-        super.setUp();
-        (fyToken0, pool0) = yieldAddSeriesAndPool(series0Id, maturity0);
-        vm.prank(owner);
-        amo.addSeries(series0Id, IFYToken(address(fyToken0)), pool0);
-    }
-}
-
-abstract contract WithTwoSeriesAdded is WithSeriesAdded {
-    FYTokenMock public fyToken1; // second token added
-    Pool public pool1; // second pool added
-
-    function setUp() public virtual override {
-        super.setUp();
-        (fyToken1, pool1) = yieldAddSeriesAndPool(series1Id, maturity1); // add series on Yield side
-        vm.prank(owner);
-        amo.addSeries(series1Id, IFYToken(address(fyToken1)), pool1);
-    }
-}
-
-abstract contract WithDebtAndFyFraxInAMO is WithTwoSeriesAdded {
-    function setUp() public virtual override {
-        super.setUp();
-        uint128 fraxAmount = 1_000_000 * 1e18;
-        base.mint(address(amo), fraxAmount);
-
-        vm.prank(owner);
-        uint256 fyFraxMinted = amo.mintFyFrax(series0Id, fraxAmount);
-    }
-}
-
-abstract contract WithMatureFyFrax is WithDebtAndFyFraxInAMO {
-    function setUp() public virtual override {
-        super.setUp();
-
-        vm.warp(pool0.maturity() + 1);
-    }
-}
-
-abstract contract WithLiquidityAddedToAMM is WithTwoSeriesAdded {
-    function setUp() public virtual override {
-        super.setUp();
-        uint128 fraxAmount = 1_000_000 * 1e18;
-        uint256 expectedLpTokens = 1_000_000 * 1e18;
-        base.mint(address(amo), fraxAmount);
-
-        vm.prank(owner);
-        (uint256 fraxUsed, uint256 poolMinted) = amo.addLiquidityToAMM(series0Id, fraxAmount, 0, 0, 1);
-    }
-}
-
-abstract contract WithRatesIncreased is WithLiquidityAddedToAMM {
-    function setUp() public virtual override {
-        super.setUp();
-        uint128 fraxAmount = 50_000 * 1e18;
-
-        base.mint(address(amo), fraxAmount);
-        vm.prank(owner);
-        amo.increaseRates(series0Id, fraxAmount, 49_500 * 1e18);
     }
 }
 
@@ -350,6 +306,19 @@ contract YieldSpaceAMO_ZeroState is ZeroState {
     }
 }
 
+
+abstract contract WithSeriesAdded is ZeroState {
+    FYTokenMock public fyToken0; // first token added
+    Pool public pool0; // first pool added
+
+    function setUp() public virtual override {
+        super.setUp();
+        (fyToken0, pool0) = yieldAddSeriesAndPool(series0Id, maturity0);
+        vm.prank(owner);
+        amo.addSeries(series0Id, IFYToken(address(fyToken0)), pool0);
+    }
+}
+
 contract YieldSpaceAMO_WithSeriesAdded is WithSeriesAdded {
     // NOTE: The test for reverting on "Index mismatch" is found below in WithTwoSeriesAdded tests.
 
@@ -401,6 +370,19 @@ contract YieldSpaceAMO_WithSeriesAdded is WithSeriesAdded {
         require(address(fyTokenFound) == address(newFyToken));
         require(address(poolFound) == address(newPool));
         require(maturityFound == maturity1);
+    }
+}
+
+
+abstract contract WithTwoSeriesAdded is WithSeriesAdded {
+    FYTokenMock public fyToken1; // second token added
+    Pool public pool1; // second pool added
+
+    function setUp() public virtual override {
+        super.setUp();
+        (fyToken1, pool1) = yieldAddSeriesAndPool(series1Id, maturity1); // add series on Yield side
+        vm.prank(owner);
+        amo.addSeries(series1Id, IFYToken(address(fyToken1)), pool1);
     }
 }
 
@@ -511,6 +493,17 @@ contract YieldSpaceAMO_WithTwoSeriesAdded is WithTwoSeriesAdded {
     }
 }
 
+abstract contract WithDebtAndFyFraxInAMO is WithTwoSeriesAdded {
+    function setUp() public virtual override {
+        super.setUp();
+        uint128 fraxAmount = 1_000_000 * 1e18;
+        base.mint(address(amo), fraxAmount);
+
+        vm.prank(owner);
+        amo.mintFyFrax(series0Id, fraxAmount);
+    }
+}
+
 contract YieldSpaceAMO_WithDebt is WithDebtAndFyFraxInAMO {
     function testUnit_burnFyFrax_repay() public {
         console.log("burnFyFrax() repays debt if it can");
@@ -576,7 +569,6 @@ contract YieldSpaceAMO_WithDebt is WithDebtAndFyFraxInAMO {
             0, // [4] fyFraxInLP: fyFrax our LP can claim
             0 // [5] LPOwned: number of LP tokens
         ];
-        displayViewFns();
         checkViews(
             CheckViewsParams(
                 series0Id, // seriesId_showAllocations
@@ -588,6 +580,14 @@ contract YieldSpaceAMO_WithDebt is WithDebtAndFyFraxInAMO {
                 1_000_000 * 1e18 // expectedValueAsFrax_dollarBalances
             )
         );
+    }
+}
+
+abstract contract WithMatureFyFrax is WithDebtAndFyFraxInAMO {
+    function setUp() public virtual override {
+        super.setUp();
+
+        vm.warp(pool0.maturity() + 1);
     }
 }
 
@@ -631,6 +631,18 @@ contract YieldSpaceAMO_WithMatureFyFrax is WithMatureFyFrax {
                 fyFraxAmount + 1_000_000 * 1e18 // expectedValueAsFrax_dollarBalances
             )
         );
+    }
+}
+
+abstract contract WithLiquidityAddedToAMM is WithTwoSeriesAdded {
+    function setUp() public virtual override {
+        super.setUp();
+        uint128 fraxAmount = 1_000_000 * 1e18;
+        uint256 expectedLpTokens = 1_000_000 * 1e18;
+        base.mint(address(amo), fraxAmount);
+
+        vm.prank(owner);
+        (uint256 fraxUsed, uint256 poolMinted) = amo.addLiquidityToAMM(series0Id, fraxAmount, 0, 0, 1);
     }
 }
 
@@ -838,7 +850,7 @@ contract YieldSpaceAMO_WithLiquidityAddedToAMM is WithLiquidityAddedToAMM {
             fraxAmount, // [4] fyFraxInLP: fyFrax our LP can claim
             poolAmoBefore // [5] LPOwned: number of LP tokens
         ];
-
+        displayViewFns();
         checkViews(
             CheckViewsParams(
                 series0Id, // seriesId_showAllocations
@@ -912,6 +924,29 @@ contract YieldSpaceAMO_WithLiquidityAddedToAMM is WithLiquidityAddedToAMM {
                 expectedCurrentFrax // expectedValueAsFrax_dollarBalances
             )
         );
+    }
+}
+
+abstract contract WithRatesIncreased is WithLiquidityAddedToAMM {
+
+    uint256[6] public showAllocations;
+    uint256 public fraxValue1_000_000_000_000;
+    uint256 public currentFrax;
+    uint256 public dollarBalances_valueAsFrax;
+    uint256 public dollarBalances_valueAsCollateral;
+    function setUp() public virtual override {
+        super.setUp();
+        uint128 fraxAmount = 50_000 * 1e18;
+
+        base.mint(address(amo), fraxAmount);
+        vm.prank(owner);
+        amo.increaseRates(series0Id, fraxAmount, 49_500 * 1e18);
+
+        showAllocations = amo.showAllocations(series0Id);
+        fraxValue1_000_000_000_000 = amo.fraxValue(series0Id, 1_000_000_000_000 * 1e18);
+        currentFrax = amo.currentFrax();
+        (dollarBalances_valueAsFrax, dollarBalances_valueAsCollateral) = amo.dollarBalances();
+
     }
 }
 
@@ -1011,7 +1046,6 @@ contract YieldSpaceAMO_WithRatesIncreased is WithRatesIncreased {
             debt, // [4] fyFraxInLP: fyFrax our LP can claim
             pool0.balanceOf(address(amo)) // [5] LPOwned: number of LP tokens
         ];
-        displayViewFns();
         checkViews(
             CheckViewsParams(
                 series0Id, // seriesId_showAllocations
@@ -1025,26 +1059,3 @@ contract YieldSpaceAMO_WithRatesIncreased is WithRatesIncreased {
         );
     }
 }
-
-// X Zero State
-// X addSeries -> WithSeries
-//   X remove series
-//   X addAdditionalSeries => WithTwoSeries
-//     X mintFyFrax
-//     X burnFyFrax
-//     X burnFyFrax up to debt level
-//     X burnFyFrax with mature fyFrax
-//     X add liquidity with borrowing some fyfrax
-//     X add liquidity with some fyFrax already there
-//     X add liquidity with some frax already there
-//     X add liquidity with both already there
-//     X addLiquidity to a second pool
-//     X addLiquidity -> WithLiquidityInYieldSpace
-//       X increaseRates - with preExistingFytokne
-//       X increaseRates - WithIncreasedRates
-//         X decreaseRates
-//         X removeLiquidity
-//         -> afterMaturity
-//             check reverts
-//             check views
-//
