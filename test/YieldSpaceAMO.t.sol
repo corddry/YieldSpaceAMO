@@ -1058,4 +1058,50 @@ contract YieldSpaceAMO_WithRatesIncreased is WithRatesIncreased {
             )
         );
     }
+
+    /* warp to maturity and check view fns
+     ******************************************************************************************************************/
+    function testUnit_checkViewFnsAtMaturity() public {
+        console.log("view functions should return correct info after maturity");
+        // return values for all of the view fns were stored in state in the WithRatesIncreased abstract contract
+
+        // we first confirm the cached values  reflect the current return values
+        uint256[6] memory allocations = amo.showAllocations(series0Id);
+        require(allocations[0] == showAllocations[0]);
+        require(allocations[1] == showAllocations[1]);
+        require(allocations[2] == showAllocations[2]);
+        require(allocations[3] == showAllocations[3]);
+        require(allocations[4] == showAllocations[4]);
+        require(allocations[5] == showAllocations[5]);
+        require(amo.fraxValue(series0Id, 1_000_000_000_000 * 1e18) == fraxValue1_000_000_000_000);
+        require(amo.currentFrax() == currentFrax);
+        (uint256 valueAsFrax, uint256 valueAsCollateral) = amo.dollarBalances();
+        require(valueAsFrax == dollarBalances_valueAsFrax);
+        require(valueAsCollateral == dollarBalances_valueAsCollateral);
+
+        // then we warp forward to the pool0 maturity date
+        vm.warp(pool0.maturity() + 1);
+
+        // then we check the values again, showAllocations() should return the same as above (what was previously cached)
+        allocations = amo.showAllocations(series0Id);
+        require(allocations[0] == showAllocations[0]);
+        require(allocations[1] == showAllocations[1]);
+        require(allocations[2] == showAllocations[2]);
+        require(allocations[3] == showAllocations[3]);
+        require(allocations[4] == showAllocations[4]);
+        require(allocations[5] == showAllocations[5]);
+
+        // The only one which will change is the return value of fraxValue(seriesId, amount) on a high amount.
+        // Previously (before maturity) it would see if it could sell the excess over the debt amount, and
+        // if it couldnt sell it then it would just ignore it.
+        // But now, since its matured, all fyTokens can be converted to base tokens 1:1 so we expect the return value
+        // of the fraxValue of 1 quadrillion fyFrax to be 1 quadrillion frax
+        require(amo.fraxValue(series0Id, 1_000_000_000_000 * 1e18) == 1_000_000_000_000 * 1e18);
+
+        // the rest of the return values should return the same as above
+        require(amo.currentFrax() == currentFrax);
+        (valueAsFrax, valueAsCollateral) = amo.dollarBalances();
+        require(valueAsFrax == dollarBalances_valueAsFrax);
+        require(valueAsCollateral == dollarBalances_valueAsCollateral);
+    }
 }
