@@ -72,6 +72,6 @@ contract FraxVaultMock {
         balances[vaultId].art = balances[vaultId].art.add(art);
         address fyToken = address(series[vaults[vaultId].seriesId].fyToken);
         if (art > 0) FYTokenMock(fyToken).mint(to, uint128(art));
-        if (art < 0) FYTokenMock(fyToken).burn(fyToken, uint128(-art));
+        if (art < 0) FYTokenMock(fyToken).burn(msg.sender, uint128(-art));
     }
 }

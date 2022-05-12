@@ -1,0 +1,20 @@
+{
+    "workbench.colorCustomizations": {
+      "titleBar.activeForeground": "#e81e08",
+      "titleBar.inactiveForeground": "#e81e08",
+      "titleBar.activeBackground": "#4ec433",
+      "titleBar.inactiveBackground": "#4ec433"
+    },
+    "editor.tokenColorCustomizations": {
+      "textMateRules": [
+          {
+              "scope": [
+                  "comment",
+              ],
+              "settings": {
+                  "fontStyle": "",
+              }
+          }
+      ]
+    }
+  }

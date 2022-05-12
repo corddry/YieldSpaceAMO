@@ -7,7 +7,7 @@ import {IFrax} from "../../src/interfaces/IFrax.sol";
 
 contract FraxMock is ERC20Permit("FRAX", "FRAX", 18) {
 
-  uint256 public global_collateral_ratio = 1000000; // fp6
+  uint256 public global_collateral_ratio = 950000; // fp6
 
   function setGlobalCollateralRatio(uint256 gcr) public {
     global_collateral_ratio = gcr;
