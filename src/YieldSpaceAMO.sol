@@ -16,7 +16,9 @@ pragma solidity 0.8.13;
 // Primary Author(s)
 // Jack Corddry: https://github.com/corddry
 // Sam Kazemian: https://github.com/samkazemian
-// Dennis: https://github.com/denett
+// Dennett: https://github.com/denett
+// Alberto Cuesta Cañada: https://github.com/alcueca
+// Devtooligan: https://github.com/devtooligan
 
 import {Owned} from "./utils/Owned.sol";
 import {IFrax} from "./interfaces/IFrax.sol";
