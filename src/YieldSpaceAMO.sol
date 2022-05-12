@@ -209,6 +209,8 @@ contract YieldSpaceAMO is Owned {
         });
 
         _seriesIterator.push(seriesId);
+
+        emit seriesAdded(seriesId);
     }
 
     /// @notice remove a new series in the AMO, to keep gas costs in place
@@ -229,6 +231,8 @@ contract YieldSpaceAMO is Owned {
             _seriesIterator[seriesIndex] = _seriesIterator[activeSeries - 1];
         }
         _seriesIterator.pop();
+
+        emit seriesRemoved(seriesId);
     }
 
     /// @notice mint fyFrax using FRAX as collateral 1:1 Frax to fyFrax
@@ -442,4 +446,6 @@ contract YieldSpaceAMO is Owned {
     event RatesIncreased(uint256 fraxUsed, uint256 fraxReceived);
     event RatesDecreased(uint256 fraxUsed, uint256 fraxReceived);
     event AMOMinterSet(address amoMinterAddress);
+    event seriesAdded(bytes6 seriesId);
+    event seriesRemoved(bytes6 seriesId);
 }
