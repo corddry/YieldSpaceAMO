@@ -54,7 +54,7 @@ contract YieldSpaceAMO is Owned {
     address public custodianAddress;
 
     // Yield Protocol
-    ILadle public immutable ladle;
+    ILadle public ladle;
     ICauldron public immutable cauldron;
     address public immutable fraxJoin;
     mapping(bytes6 => Series) public series;
@@ -425,6 +425,13 @@ contract YieldSpaceAMO is Owned {
         emit AMOMinterSet(address(_amoMinter));
     }
 
+    /// @notice Replace the Ladle
+    function setLadle(ILadle _ladle) external onlyByOwnGov {
+        ladle = _ladle;
+
+        emit LadleSet(address(_ladle));
+    }
+
     /// @notice generic proxy
     function execute(
         address to,
@@ -441,6 +448,7 @@ contract YieldSpaceAMO is Owned {
     event RatesIncreased(uint256 fraxUsed, uint256 fraxReceived);
     event RatesDecreased(uint256 fraxUsed, uint256 fraxReceived);
     event AMOMinterSet(address amoMinterAddress);
+    event LadleSet(address ladleAddress);
     event SeriesAdded(bytes6 seriesId);
     event SeriesRemoved(bytes6 seriesId);
 }
