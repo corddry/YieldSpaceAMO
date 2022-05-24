@@ -54,7 +54,7 @@ contract YieldSpaceAMO is Owned {
     address public custodianAddress;
 
     // Yield Protocol
-    ILadle public immutable ladle;
+    ILadle public ladle;
     ICauldron public immutable cauldron;
     address public immutable fraxJoin;
     mapping(bytes6 => Series) public series;
@@ -96,10 +96,6 @@ contract YieldSpaceAMO is Owned {
     }
 
     /* ================ VIEWS ================ */
-    // /// @notice returns current rate on Frax debt
-    // function getRate() public view returns (uint256) { //TODO Name better & figure out functionality
-    //     return (circulatingAMOMintedFyFrax() - currentRaisedFrax()) / (currentRaisedFrax() * /*timeremaining*/; //TODO pos/neg
-    // }
 
     function showAllocations(bytes6 seriesId) public view returns (uint256[6] memory) {
         Series storage _series = series[seriesId];
@@ -210,7 +206,7 @@ contract YieldSpaceAMO is Owned {
 
         _seriesIterator.push(seriesId);
 
-        emit seriesAdded(seriesId);
+        emit SeriesAdded(seriesId);
     }
 
     /// @notice remove a new series in the AMO, to keep gas costs in place
@@ -232,7 +228,7 @@ contract YieldSpaceAMO is Owned {
         }
         _seriesIterator.pop();
 
-        emit seriesRemoved(seriesId);
+        emit SeriesRemoved(seriesId);
     }
 
     /// @notice mint fyFrax using FRAX as collateral 1:1 Frax to fyFrax
@@ -429,6 +425,13 @@ contract YieldSpaceAMO is Owned {
         emit AMOMinterSet(address(_amoMinter));
     }
 
+    /// @notice Replace the Ladle
+    function setLadle(ILadle _ladle) external onlyByOwnGov {
+        ladle = _ladle;
+
+        emit LadleSet(address(_ladle));
+    }
+
     /// @notice generic proxy
     function execute(
         address to,
@@ -440,12 +443,12 @@ contract YieldSpaceAMO is Owned {
     }
 
     /* ================ EVENTS =============== */
-    //TODO What other events do we want?
     event LiquidityAdded(uint256 fraxUsed, uint256 poolMinted);
     event LiquidityRemoved(uint256 fraxReceived, uint256 poolBurned);
     event RatesIncreased(uint256 fraxUsed, uint256 fraxReceived);
     event RatesDecreased(uint256 fraxUsed, uint256 fraxReceived);
     event AMOMinterSet(address amoMinterAddress);
-    event seriesAdded(bytes6 seriesId);
-    event seriesRemoved(bytes6 seriesId);
+    event LadleSet(address ladleAddress);
+    event SeriesAdded(bytes6 seriesId);
+    event SeriesRemoved(bytes6 seriesId);
 }
