@@ -10,6 +10,8 @@
 ### Install
 ```shell
 forge install
+git submodule init
+git submodule update
 ```
 
 ### Commands
