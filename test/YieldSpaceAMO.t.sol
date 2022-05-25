@@ -12,7 +12,7 @@ import {IFYToken} from "vault-interfaces/IFYToken.sol";
 import {FraxVaultMock} from "./mocks/FraxVaultMock.sol";
 import {AMOMinterMock} from "./mocks/AMOMinterMock.sol";
 import {DataTypes} from "vault-interfaces/DataTypes.sol";
-import {YieldMath} from "yieldspace-v2/contracts/YieldMath.sol";
+//import {YieldMath} from "yieldspace-v2/contracts/YieldMath.sol";
 import {IERC20} from "yield-utils-v2/contracts/token/IERC20.sol";
 import {SafeERC20Namer} from "yield-utils-v2/contracts/token/SafeERC20Namer.sol";
 
