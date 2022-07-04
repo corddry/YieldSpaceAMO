@@ -309,13 +309,15 @@ contract YieldSpaceAMO is Owned {
     ) internal returns (uint256 fraxAmount, uint128 fyFraxStored) {
         if (_series.maturity < block.timestamp) {
             // At maturity, forget about debt and redeem at 1:1
-            _series.fyToken.transfer(address(_series.fyToken), fyFraxAmount);
+            // For redemption directly on the fyFrax contract, we don't need approvals or transfers
             fraxAmount = _series.fyToken.redeem(to, fyFraxAmount);
         } else {
             // Before maturity, repay as much debt as possible, and keep any surplus fyFrax
             uint256 debt = cauldron.balances(_series.vaultId).art;
             (fraxAmount, fyFraxStored) = debt > fyFraxAmount ? (fyFraxAmount, 0) : (debt, (fyFraxAmount - debt).u128());
-            // When repaying with fyFrax, we don't need to approve anything
+            // Transfer the fyFrax intended for payment to the fyFrax contract
+            _series.fyToken.transfer(address(_series.fyToken), fraxAmount);
+            // Repay debt and remove collateral
             ladle.pour(_series.vaultId, to, -(fraxAmount.u128().i128()), -(fraxAmount.u128().i128()));
         }
     }
