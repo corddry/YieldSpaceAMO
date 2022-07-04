@@ -3,7 +3,7 @@ pragma solidity 0.8.13;
 
 import "./FraxMock.sol";
 import "@yield-protocol/utils-v2/contracts/token/ERC20Permit.sol";
-
+import "forge-std/Test.sol";
 
 contract FYTokenMock is ERC20Permit {
     FraxMock public base;
@@ -51,7 +51,7 @@ contract FYTokenMock is ERC20Permit {
     }
 
     function redeem(address to, uint256 amount) public returns (uint256) {
-        _burn(address(this), amount); // redeem would also take the fyToken from msg.sender, but we don't need that here
+        _burn(msg.sender, amount);
         base.mint(to, amount);
         return amount;
     }
